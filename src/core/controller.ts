@@ -12,7 +12,16 @@ import type {
   PlatformAuthResult,
   PlatformAuthState,
   VaultSource,
+  YapprDecryptedKeyExchangeResult,
+  YapprKeyExchangeConfig,
+  YapprKeyRegistrationRequest,
+  YapprUnsignedKeyRegistrationResult,
 } from './types'
+import {
+  DEFAULT_YAPPR_KEY_EXCHANGE_CONFIG,
+  decodeYapprContractId,
+  pollForYapprKeyExchangeResponse,
+} from '../key-exchange/yappr-protocol'
 
 const DEFAULT_FEATURES: PlatformAuthFeatures = {
   usernameGate: true,
@@ -92,6 +101,75 @@ export class PlatformAuthController {
       this.balanceInterval = null
     }
     this.listeners.clear()
+  }
+
+  public getYapprKeyExchangeConfig(overrides: Partial<YapprKeyExchangeConfig> = {}): YapprKeyExchangeConfig {
+    const configured = this.deps.yapprKeyExchangeConfig ?? {}
+
+    const appContractId = overrides.appContractId ?? configured.appContractId
+    const keyExchangeContractId = overrides.keyExchangeContractId ?? configured.keyExchangeContractId
+    if (!appContractId || !keyExchangeContractId) {
+      throw new Error('Yappr key exchange is not configured')
+    }
+
+    return {
+      appContractId,
+      keyExchangeContractId,
+      network: overrides.network ?? configured.network ?? this.deps.network,
+      label: overrides.label ?? configured.label ?? DEFAULT_YAPPR_KEY_EXCHANGE_CONFIG.label,
+      pollIntervalMs: overrides.pollIntervalMs ?? configured.pollIntervalMs ?? DEFAULT_YAPPR_KEY_EXCHANGE_CONFIG.pollIntervalMs,
+      timeoutMs: overrides.timeoutMs ?? configured.timeoutMs ?? DEFAULT_YAPPR_KEY_EXCHANGE_CONFIG.timeoutMs,
+    }
+  }
+
+  public async pollYapprKeyExchangeResponse(
+    appEphemeralPubKeyHash: Uint8Array,
+    appEphemeralPrivateKey: Uint8Array,
+    overrides: Partial<YapprKeyExchangeConfig> = {},
+    options: { signal?: AbortSignal; onPoll?: () => void } = {},
+  ): Promise<YapprDecryptedKeyExchangeResult> {
+    const { port, config } = this.requireYapprKeyExchange(overrides)
+    const contractIdBytes = decodeYapprContractId(config.appContractId)
+
+    return pollForYapprKeyExchangeResponse(
+      port,
+      contractIdBytes,
+      appEphemeralPubKeyHash,
+      appEphemeralPrivateKey,
+      {
+        pollIntervalMs: config.pollIntervalMs,
+        timeoutMs: config.timeoutMs,
+        signal: options.signal,
+        onPoll: options.onPoll,
+        logger: this.logger,
+      },
+    )
+  }
+
+  public async checkYapprKeysRegistered(
+    identityId: string,
+    authPublicKey: Uint8Array,
+    encryptionPublicKey: Uint8Array,
+    overrides: Partial<YapprKeyExchangeConfig> = {},
+  ): Promise<boolean> {
+    const { port } = this.requireYapprKeyExchange(overrides)
+    return port.checkKeysRegistered(identityId, authPublicKey, encryptionPublicKey)
+  }
+
+  public async buildYapprUnsignedKeyRegistrationTransition(
+    request: YapprKeyRegistrationRequest,
+    overrides: Partial<YapprKeyExchangeConfig> = {},
+  ): Promise<YapprUnsignedKeyRegistrationResult> {
+    const { port } = this.requireYapprKeyExchange(overrides)
+    return port.buildUnsignedKeyRegistrationTransition(request)
+  }
+
+  public async completeYapprKeyExchangeLogin(input: {
+    identityId: string
+    loginKey: Uint8Array
+    keyIndex: number
+  }): Promise<PlatformAuthResult> {
+    return this.loginWithLoginKey(input.identityId, input.loginKey, input.keyIndex)
   }
 
   public async restoreSession(): Promise<AuthUser | null> {
@@ -816,6 +894,23 @@ export class PlatformAuthController {
 
     clearInterval(this.balanceInterval)
     this.balanceInterval = null
+  }
+
+  private requireYapprKeyExchange(overrides: Partial<YapprKeyExchangeConfig> = {}): {
+    port: NonNullable<PlatformAuthDependencies['yapprKeyExchange']>
+    config: YapprKeyExchangeConfig
+  } {
+    if (!this.features.keyExchangeLogin) {
+      throw new Error('Yappr key exchange login is disabled')
+    }
+    if (!this.deps.yapprKeyExchange) {
+      throw new Error('Yappr key exchange is not configured')
+    }
+
+    return {
+      port: this.deps.yapprKeyExchange,
+      config: this.getYapprKeyExchangeConfig(overrides),
+    }
   }
 
   private requireUser(message: string): AuthUser {
