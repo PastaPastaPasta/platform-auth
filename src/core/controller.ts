@@ -540,6 +540,17 @@ export class PlatformAuthController {
     }))
   }
 
+  public async setUsername(username: string): Promise<void> {
+    if (!this.state.user) {
+      return
+    }
+
+    await this.updateSessionUser((current) => ({
+      ...current,
+      username,
+    }))
+  }
+
   public async refreshBalance(): Promise<void> {
     const identityId = this.state.user?.identityId
     if (!identityId) {

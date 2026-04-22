@@ -14,6 +14,7 @@ export interface PlatformAuthContextValue extends PlatformAuthState {
   addPasswordAccess(password: string, iterations: number, label?: string): Promise<void>
   addPasskeyAccess(label?: string): Promise<void>
   logout(): Promise<PlatformAuthResult>
+  setUsername(username: string): Promise<void>
   refreshUsername(): Promise<void>
   refreshBalance(): Promise<void>
 }
@@ -44,6 +45,7 @@ export function PlatformAuthProvider({
     addPasswordAccess: controller.addPasswordAccess.bind(controller),
     addPasskeyAccess: controller.addPasskeyAccess.bind(controller),
     logout: controller.logout.bind(controller),
+    setUsername: controller.setUsername.bind(controller),
     refreshUsername: controller.refreshUsername.bind(controller),
     refreshBalance: controller.refreshBalance.bind(controller),
   }), [controller, state])
