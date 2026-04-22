@@ -1,49 +1,79 @@
 # platform-auth
 
-`platform-auth` is a headless, reusable authentication engine for Dash Platform applications.
+`platform-auth` is a reusable authentication toolkit for Dash Platform applications.
 
-It is designed around the auth flow already implemented in Yappr, but split into portable modules so another app can keep the same behavior while swapping UI, routes, storage, contracts, or optional features.
+The project is intended for app developers who want a consistent, configurable auth stack for Platform-based web apps without hard-coding auth flow logic into each individual product.
 
-## What the package includes
+## Scope
 
-- A headless `PlatformAuthController` that orchestrates:
-  - session restore
-  - direct auth-key login
-  - password login with fallback chains
-  - passkey login
-  - login-key / wallet key-exchange login
-  - unified auth-vault enrollment and merging
-  - logout
-  - username and balance refresh
-- A React provider and hook for consuming controller state in application code
-- Typed adapter contracts so each app can plug in its own Dash services, storage, routing, and optional side effects
-- Review and migration docs based on Yappr’s current auth flow
+`platform-auth` focuses on orchestration, session state, and integration boundaries.
 
-## What the package intentionally does not include
+It is designed to help applications compose and reuse:
 
-This package does not ship a fully branded login modal.
+- identity-based sign-in
+- password-unlock flows
+- passkey-unlock flows
+- wallet or login-key based sign-in flows
+- auth-vault enrollment and secret merging
+- session restore and logout behavior
+- username and balance refresh
+- application-specific post-login hooks
 
-Yappr’s current auth UI is tightly coupled to app copy, route choices, modal stores, backup prompts, and post-login product decisions. A prebuilt UI here would either be too rigid to reuse or so configurable that it would hide the real orchestration boundary.
+## Design
 
-Instead, this package provides:
+The project is headless-first.
 
-- a headless controller
-- React bindings
-- intent and event objects for app-specific UI and routing
+That means the core package owns auth state and flow coordination, while each application keeps control over:
 
-## Design goals
+- branding and UI
+- routing
+- storage implementation details
+- Dash service adapters
+- optional product-specific side effects
 
-- Preserve observed behavior while moving orchestration out of app code
-- Keep all major auth capabilities individually configurable or disableable
-- Support multiple storage and contract strategies
-- Keep app-specific UI and navigation outside the core package
+This keeps the auth engine reusable across multiple apps with different onboarding, navigation, and feature sets.
 
-## Main exports
+## Package Structure
 
-- `PlatformAuthController`
-- `PlatformAuthProvider`
-- `usePlatformAuth`
-- all core types and adapter interfaces
+- `PlatformAuthController`: the core auth orchestration engine
+- `PlatformAuthProvider` and `usePlatformAuth`: React bindings for consuming controller state
+- typed adapter interfaces: contracts for storage, identity lookup, usernames, vaults, passkeys, and side effects
+
+## Integration Model
+
+Applications integrate `platform-auth` by providing adapters for their own environment.
+
+Typical adapters include:
+
+- session persistence
+- secret storage
+- identity and DPNS lookups
+- profile existence checks
+- passkey operations
+- auth-vault reads and writes
+- app-specific post-login tasks
+
+The package returns state, methods, and high-level intents. The host app decides how those intents map to routes, dialogs, or other UI.
+
+## Goals
+
+- make Platform auth reusable across applications
+- preserve app behavior while removing auth orchestration from app code
+- keep flows individually configurable and disableable
+- support multiple storage and contract strategies
+- avoid coupling the package to a single app’s UI
+
+## Non-Goals
+
+- shipping a single branded login modal for all apps
+- forcing one routing model or onboarding sequence
+- bundling app-specific product logic into the core controller
+
+## Current Status
+
+The project currently provides the reusable controller, React bindings, and adapter contracts needed to move application auth flows behind a shared package boundary.
+
+Implementation notes from the initial extraction work are kept in [`docs/`](./docs), including app-specific migration and review material.
 
 ## Development
 
