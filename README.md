@@ -1,12 +1,12 @@
-# platform-auth
+# @pastapastapasta/platform-auth
 
-`platform-auth` is a reusable authentication toolkit for Dash Platform applications.
+`@pastapastapasta/platform-auth` is a reusable authentication toolkit for Dash Platform applications.
 
 The project is intended for app developers who want a consistent, configurable auth stack for Platform-based web apps without hard-coding auth flow logic into each individual product.
 
 ## Scope
 
-`platform-auth` focuses on orchestration, session state, and integration boundaries.
+`@pastapastapasta/platform-auth` focuses on orchestration, session state, and integration boundaries.
 
 It is designed to help applications compose and reuse:
 
@@ -43,7 +43,7 @@ This keeps the auth engine reusable across multiple apps with different onboardi
 
 ## Integration Model
 
-Applications integrate `platform-auth` by providing adapters for their own environment.
+Applications integrate `@pastapastapasta/platform-auth` by providing adapters for their own environment.
 
 Typical adapters include:
 
@@ -60,7 +60,7 @@ The package returns state, methods, and high-level intents. The host app decides
 
 ## Yappr-Compatible Key Exchange
 
-`platform-auth` now ships a first-class, headless Yappr-compatible key-exchange module.
+`@pastapastapasta/platform-auth` now ships a first-class, headless Yappr-compatible key-exchange module.
 
 That module includes:
 
@@ -110,6 +110,18 @@ This keeps the package reusable across apps while allowing each app to keep its 
 ## Current Status
 
 The project currently provides the reusable controller, React bindings, adapter contracts, and a Yappr-compatible key-exchange module for QR-based wallet login flows.
+
+## Installation
+
+```bash
+npm install @pastapastapasta/platform-auth
+```
+
+For GitHub Packages installs, configure npm for the `@pastapastapasta` scope:
+
+```ini
+@pastapastapasta:registry=https://npm.pkg.github.com
+```
 
 Implementation notes from the initial extraction work are kept in [`docs/`](./docs), including app-specific migration material and an integration guide for the reusable key-exchange module.
 
