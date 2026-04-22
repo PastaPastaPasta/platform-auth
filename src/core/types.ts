@@ -196,6 +196,65 @@ export interface PlatformAuthCryptoPort {
   deriveEncryptionKeyFromLogin(loginKey: Uint8Array, identityIdBytes: Uint8Array): Uint8Array
 }
 
+export type YapprKeyExchangeNetworkName = NetworkName | 'devnet'
+
+export interface YapprKeyExchangeConfig {
+  appContractId: string
+  keyExchangeContractId: string
+  network: YapprKeyExchangeNetworkName
+  label: string
+  pollIntervalMs: number
+  timeoutMs: number
+}
+
+export interface YapprKeyExchangeResponse {
+  $id: string
+  $ownerId: string
+  $revision: number
+  contractId: Uint8Array
+  appEphemeralPubKeyHash: Uint8Array
+  walletEphemeralPubKey: Uint8Array
+  encryptedPayload: Uint8Array
+  keyIndex: number
+}
+
+export interface YapprDecryptedKeyExchangeResult {
+  loginKey: Uint8Array
+  keyIndex: number
+  walletEphemeralPubKey: Uint8Array
+  identityId: string
+}
+
+export interface YapprKeyRegistrationRequest {
+  identityId: string
+  authPrivateKey: Uint8Array
+  authPublicKey: Uint8Array
+  encryptionPrivateKey: Uint8Array
+  encryptionPublicKey: Uint8Array
+}
+
+export interface YapprUnsignedKeyRegistrationResult {
+  transitionBytes: Uint8Array
+  authKeyId: number
+  encryptionKeyId: number
+  identityRevision: bigint
+}
+
+export interface YapprKeyExchangePort {
+  getResponse(
+    contractIdBytes: Uint8Array,
+    appEphemeralPubKeyHash: Uint8Array,
+  ): Promise<YapprKeyExchangeResponse | null>
+  buildUnsignedKeyRegistrationTransition(
+    request: YapprKeyRegistrationRequest,
+  ): Promise<YapprUnsignedKeyRegistrationResult>
+  checkKeysRegistered(
+    identityId: string,
+    authPublicKey: Uint8Array,
+    encryptionPublicKey: Uint8Array,
+  ): Promise<boolean>
+}
+
 export interface UnifiedVaultPort {
   isConfigured(): boolean
   getStatus(identityId: string): Promise<AuthVaultStatus>
@@ -291,6 +350,8 @@ export interface PlatformAuthDependencies {
   clientIdentity?: ClientIdentityPort
   sideEffects?: SideEffectsPort
   crypto?: PlatformAuthCryptoPort
+  yapprKeyExchange?: YapprKeyExchangePort
+  yapprKeyExchangeConfig?: Partial<YapprKeyExchangeConfig>
   vault?: UnifiedVaultPort
   passkeys?: PasskeyPort
   legacyPasswordLogins?: LegacyPasswordLoginPort[]

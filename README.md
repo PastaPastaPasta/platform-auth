@@ -14,6 +14,7 @@ It is designed to help applications compose and reuse:
 - password-unlock flows
 - passkey-unlock flows
 - wallet or login-key based sign-in flows
+- Yappr-compatible wallet key exchange with QR-based login and first-login key registration
 - auth-vault enrollment and secret merging
 - session restore and logout behavior
 - username and balance refresh
@@ -38,6 +39,7 @@ This keeps the auth engine reusable across multiple apps with different onboardi
 - `PlatformAuthController`: the core auth orchestration engine
 - `PlatformAuthProvider` and `usePlatformAuth`: React bindings for consuming controller state
 - typed adapter interfaces: contracts for storage, identity lookup, usernames, vaults, passkeys, and side effects
+- Yappr-compatible key-exchange module: protocol helpers, transport polling, registration helpers, and React hooks
 
 ## Integration Model
 
@@ -51,9 +53,45 @@ Typical adapters include:
 - profile existence checks
 - passkey operations
 - auth-vault reads and writes
+- key-exchange response queries and key-registration transition building
 - app-specific post-login tasks
 
 The package returns state, methods, and high-level intents. The host app decides how those intents map to routes, dialogs, or other UI.
+
+## Yappr-Compatible Key Exchange
+
+`platform-auth` now ships a first-class, headless Yappr-compatible key-exchange module.
+
+That module includes:
+
+- `dash-key:` URI helpers
+- ECDH + AES-GCM login-key decryption helpers
+- polling utilities for `loginKeyResponse` documents
+- `dash-st:` URI helpers for first-login key registration
+- React hooks:
+  - `useYapprKeyExchangeLogin(controller, options?)`
+  - `useYapprKeyRegistration(controller, onComplete?, options?)`
+
+The hooks are headless. Apps render their own QR code, timers, errors, and success states while the package keeps the protocol, timers, and state transitions consistent.
+
+## Minimum Integration
+
+To enable the shared Yappr-compatible flow in an app:
+
+1. Create a `PlatformAuthController` with the normal auth adapters.
+2. Provide `yapprKeyExchangeConfig` with:
+   - `appContractId`
+   - `keyExchangeContractId`
+   - `network`
+   - optional label and timeout overrides
+3. Provide a `yapprKeyExchange` adapter that can:
+   - query a wallet response by `(contractId, appEphemeralPubKeyHash)`
+   - build an unsigned key-registration transition
+   - verify whether the derived keys already exist on the identity
+4. Use `useYapprKeyExchangeLogin(...)` and `useYapprKeyRegistration(...)` in app-owned UI.
+5. Complete login with `controller.completeYapprKeyExchangeLogin(...)` or the lower-level `controller.loginWithLoginKey(...)`.
+
+This keeps the package reusable across apps while allowing each app to keep its own styling, routing, and SDK/service wiring.
 
 ## Goals
 
@@ -71,9 +109,9 @@ The package returns state, methods, and high-level intents. The host app decides
 
 ## Current Status
 
-The project currently provides the reusable controller, React bindings, and adapter contracts needed to move application auth flows behind a shared package boundary.
+The project currently provides the reusable controller, React bindings, adapter contracts, and a Yappr-compatible key-exchange module for QR-based wallet login flows.
 
-Implementation notes from the initial extraction work are kept in [`docs/`](./docs), including app-specific migration and review material.
+Implementation notes from the initial extraction work are kept in [`docs/`](./docs), including app-specific migration material and an integration guide for the reusable key-exchange module.
 
 ## Development
 
