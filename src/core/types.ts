@@ -112,6 +112,7 @@ export interface EnrollPasskeyOptions {
   displayName: string
   label: string
   rpId?: string
+  rpName?: string
 }
 
 export interface SessionStore {
