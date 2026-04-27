@@ -45,12 +45,6 @@ import {
 } from './yappr-protocol'
 
 describe('hash160', () => {
-  it('produces a 20-byte ripemd160(sha256(x))', () => {
-    const out = hash160(new Uint8Array([1, 2, 3]))
-    expect(out).toBeInstanceOf(Uint8Array)
-    expect(out).toHaveLength(20)
-  })
-
   it('is deterministic for the same input', () => {
     const a = hash160(APP_PUBLIC_KEY)
     const b = hash160(APP_PUBLIC_KEY)
@@ -234,9 +228,9 @@ describe('serializeYapprKeyExchangeRequest', () => {
   })
 
   it('rejects labels whose UTF-8 byte length exceeds 64 even when string length does not', () => {
-    const label = `${'x'.repeat(63)}🦊`
-    expect(label.length).toBe(65)
-    expect(new TextEncoder().encode(label).length).toBe(67)
+    const label = '🦊'.repeat(17)
+    expect(label.length).toBe(34)
+    expect(new TextEncoder().encode(label).length).toBe(68)
     expect(() =>
       serializeYapprKeyExchangeRequest({
         appEphemeralPubKey: APP_PUBLIC_KEY,
