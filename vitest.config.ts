@@ -19,6 +19,7 @@ export default defineConfig({
         'src/**/index.ts',
         'src/__smoke__/**',
         'src/__fixtures__/**',
+        'src/**/__mocks__/**',
       ],
     },
   },
