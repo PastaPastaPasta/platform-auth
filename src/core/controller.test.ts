@@ -287,8 +287,10 @@ describe('PlatformAuthController.loginWithAuthKey', () => {
 
     await controller.loginWithAuthKey(IDENTITY_ID, PRIVATE_KEY)
 
-    expect(loadingSeq).toContain(true)
     expect(loadingSeq[loadingSeq.length - 1]).toBe(false)
+    const firstTrue = loadingSeq.indexOf(true)
+    expect(firstTrue).toBeGreaterThanOrEqual(0)
+    expect(firstTrue).toBeLessThan(loadingSeq.length - 1)
   })
 
   it('persists the session snapshot with the timestamp returned by deps.now', async () => {
@@ -445,21 +447,18 @@ describe('PlatformAuthController.loginWithPasskey', () => {
       profiles: new Set([IDENTITY_ID]),
     })
     const access = makeAccess()
+    const assertion = makeAssertion()
     const unlocked = makeVaultUnlockResult(IDENTITY_ID, { authKeyWif: 'wif-passkey' })
     vi.mocked(fakes.vault!.resolveIdentityId).mockResolvedValueOnce(IDENTITY_ID)
     vi.mocked(fakes.vault!.getPasskeyAccesses).mockResolvedValueOnce([access])
-    vi.mocked(fakes.passkeys!.getPrfAssertionForCredentials).mockResolvedValueOnce(makeAssertion())
+    vi.mocked(fakes.passkeys!.getPrfAssertionForCredentials).mockResolvedValueOnce(assertion)
     vi.mocked(fakes.vault!.unlockWithPrf).mockResolvedValueOnce(unlocked)
 
     const controller = new PlatformAuthController(fakes.deps)
     const result = await controller.loginWithPasskey('alice')
 
     expect(result.intent).toEqual({ kind: 'ready', identityId: IDENTITY_ID })
-    expect(fakes.vault!.unlockWithPrf).toHaveBeenCalledWith(
-      IDENTITY_ID,
-      access,
-      expect.any(Uint8Array),
-    )
+    expect(fakes.vault!.unlockWithPrf).toHaveBeenCalledWith(IDENTITY_ID, access, assertion.prfOutput)
   })
 
   it('throws when the username has no matching access on this site', async () => {
@@ -635,12 +634,13 @@ describe('PlatformAuthController vault enrollment recovery branches', () => {
       prfInput: new Uint8Array([3]),
       rpId: 'example.test',
     }
+    const prfOutput = new Uint8Array([99])
     vi.mocked(fakes.vault!.getPasskeyAccesses).mockResolvedValueOnce([access])
     vi.mocked(fakes.passkeys!.getPrfAssertionForCredentials).mockResolvedValueOnce({
       credentialId: access.credentialId!,
       credentialIdHash: access.credentialIdHash!,
       prfInput: access.prfInput!,
-      prfOutput: new Uint8Array([99]),
+      prfOutput,
       rpId: 'example.test',
     })
     vi.mocked(fakes.vault!.unlockWithPrf).mockResolvedValueOnce(
@@ -652,7 +652,7 @@ describe('PlatformAuthController vault enrollment recovery branches', () => {
 
     const result = await controller.createOrUpdateVaultFromAuthKey(IDENTITY_ID, 'wif-extra')
     expect(result.identityId).toBe(IDENTITY_ID)
-    expect(fakes.vault!.unlockWithPrf).toHaveBeenCalled()
+    expect(fakes.vault!.unlockWithPrf).toHaveBeenCalledWith(IDENTITY_ID, access, prfOutput)
   })
 
   it('throws when an existing vault has passkey accesses but none are registered for the current rpId', async () => {
@@ -726,20 +726,20 @@ describe('PlatformAuthController vault enrollment recovery branches', () => {
       usernameMap: new Map([[IDENTITY_ID, 'alice']]),
       profiles: new Set([IDENTITY_ID]),
     })
-    const loginKeyBundle = makeVaultUnlockResult(IDENTITY_ID, {
-      loginKey: new Uint8Array(32).fill(5),
-    })
+    const loginKey = new Uint8Array(32).fill(5)
+    const loginKeyBundle = makeVaultUnlockResult(IDENTITY_ID, { loginKey })
     loginKeyBundle.bundle.secretKind = 'login-key'
     loginKeyBundle.bundle.authKeyWif = undefined
     vi.mocked(fakes.vault!.unlockWithPassword).mockResolvedValueOnce(loginKeyBundle)
+    const expectedIdBytes = new TextEncoder().encode(`decoded:${IDENTITY_ID}`)
 
     const controller = new PlatformAuthController(fakes.deps)
     const result = await controller.loginWithPassword('alice', 'pw')
 
     expect(result.intent).toEqual({ kind: 'ready', identityId: IDENTITY_ID })
-    expect(fakes.crypto!.deriveAuthKeyFromLogin).toHaveBeenCalled()
-    expect(fakes.crypto!.deriveEncryptionKeyFromLogin).toHaveBeenCalled()
-    expect(fakes.secretStore.state.loginKeys.get(IDENTITY_ID)).toEqual(loginKeyBundle.bundle.loginKey)
+    expect(fakes.crypto!.deriveAuthKeyFromLogin).toHaveBeenCalledWith(loginKey, expectedIdBytes)
+    expect(fakes.crypto!.deriveEncryptionKeyFromLogin).toHaveBeenCalledWith(loginKey, expectedIdBytes)
+    expect(fakes.secretStore.state.loginKeys.get(IDENTITY_ID)).toEqual(loginKey)
   })
 })
 
@@ -768,12 +768,13 @@ describe('PlatformAuthController.loginWithLoginKey', () => {
     })
     const controller = new PlatformAuthController(fakes.deps)
     const loginKey = new Uint8Array(32).fill(7)
+    const expectedIdBytes = new TextEncoder().encode(`decoded:${IDENTITY_ID}`)
 
     const result = await controller.loginWithLoginKey(IDENTITY_ID, loginKey, 5)
 
     expect(result.intent).toEqual({ kind: 'ready', identityId: IDENTITY_ID })
-    expect(fakes.crypto!.deriveAuthKeyFromLogin).toHaveBeenCalledWith(loginKey, expect.any(Uint8Array))
-    expect(fakes.crypto!.deriveEncryptionKeyFromLogin).toHaveBeenCalledWith(loginKey, expect.any(Uint8Array))
+    expect(fakes.crypto!.deriveAuthKeyFromLogin).toHaveBeenCalledWith(loginKey, expectedIdBytes)
+    expect(fakes.crypto!.deriveEncryptionKeyFromLogin).toHaveBeenCalledWith(loginKey, expectedIdBytes)
     expect(fakes.secretStore.state.loginKeys.get(IDENTITY_ID)).toEqual(loginKey)
     expect(fakes.secretStore.state.privateKeys.has(IDENTITY_ID)).toBe(true)
     expect(fakes.secretStore.state.encryptionKeys.has(IDENTITY_ID)).toBe(true)
@@ -787,8 +788,9 @@ describe('PlatformAuthController.loginWithLoginKey', () => {
       usernameMap: new Map([[IDENTITY_ID, 'alice']]),
       profiles: new Set([IDENTITY_ID]),
     })
-    vi.mocked(fakes.vault!.mergeSecrets).mockRejectedValue(new Error('vault offline'))
-    vi.mocked(fakes.vault!.createOrUpdateVaultBundle).mockRejectedValue(new Error('vault offline'))
+    const vaultError = new Error('vault offline')
+    vi.mocked(fakes.vault!.mergeSecrets).mockRejectedValue(vaultError)
+    vi.mocked(fakes.vault!.createOrUpdateVaultBundle).mockRejectedValue(vaultError)
 
     const controller = new PlatformAuthController(fakes.deps)
     const result = await controller.loginWithLoginKey(IDENTITY_ID, new Uint8Array(32).fill(7), 0)
@@ -796,7 +798,7 @@ describe('PlatformAuthController.loginWithLoginKey', () => {
     expect(result.intent).toEqual({ kind: 'ready', identityId: IDENTITY_ID })
     expect(vi.mocked(fakes.logger.warn)).toHaveBeenCalledWith(
       expect.stringContaining('failed to'),
-      expect.any(Error),
+      vaultError,
     )
   })
 
@@ -835,7 +837,18 @@ describe('PlatformAuthController vault management', () => {
 
     const result = await controller.createOrUpdateVaultFromAuthKey(IDENTITY_ID, 'wif-new')
 
-    expect(fakes.vault!.createOrUpdateVaultBundle).toHaveBeenCalled()
+    expect(fakes.vault!.createOrUpdateVaultBundle).toHaveBeenCalledTimes(1)
+    expect(fakes.vault!.createOrUpdateVaultBundle).toHaveBeenCalledWith(
+      IDENTITY_ID,
+      expect.objectContaining({
+        identityId: IDENTITY_ID,
+        secretKind: 'auth-key',
+        authKeyWif: 'wif-new',
+        source: 'direct-key',
+        network: 'testnet',
+      }),
+      undefined,
+    )
     expect(fakes.secretStore.state.vaultDeks.get(IDENTITY_ID)).toEqual(result.dek)
   })
 
@@ -992,7 +1005,8 @@ describe('PlatformAuthController.logout', () => {
     expect(fakes.secretStore.state.loginKeys.has(IDENTITY_ID)).toBe(false)
     expect(fakes.secretStore.state.vaultDeks.has(IDENTITY_ID)).toBe(false)
     expect(fakes.sideEffects?.runLogoutCleanup).toHaveBeenCalledWith(IDENTITY_ID)
-    expect(fakes.events.map((e) => e.type)).toContain('logout')
+    const logoutEvent = fakes.events.find((e) => e.type === 'logout')
+    expect(logoutEvent).toEqual({ type: 'logout', identityId: IDENTITY_ID })
   })
 
   it('emits a logout event with no identityId when no session is active', async () => {
@@ -1139,7 +1153,9 @@ describe('PlatformAuthController Yappr key exchange wiring', () => {
       await vi.runAllTimersAsync()
       await settled
 
-      expect(fakes.yapprKeyExchange!.getResponse).toHaveBeenCalled()
+      const callCount = vi.mocked(fakes.yapprKeyExchange!.getResponse).mock.calls.length
+      expect(callCount).toBeGreaterThanOrEqual(4)
+      expect(callCount).toBeLessThanOrEqual(6)
     } finally {
       vi.useRealTimers()
     }
@@ -1153,6 +1169,7 @@ describe('PlatformAuthController Yappr key exchange wiring', () => {
     })
     const controller = new PlatformAuthController(fakes.deps)
     const loginKey = new Uint8Array(32).fill(1)
+    const expectedIdBytes = new TextEncoder().encode(`decoded:${IDENTITY_ID}`)
 
     const result = await controller.completeYapprKeyExchangeLogin({
       identityId: IDENTITY_ID,
@@ -1161,8 +1178,8 @@ describe('PlatformAuthController Yappr key exchange wiring', () => {
     })
 
     expect(result.intent).toEqual({ kind: 'ready', identityId: IDENTITY_ID })
-    expect(fakes.crypto!.deriveAuthKeyFromLogin).toHaveBeenCalledWith(loginKey, expect.any(Uint8Array))
-    expect(fakes.crypto!.deriveEncryptionKeyFromLogin).toHaveBeenCalledWith(loginKey, expect.any(Uint8Array))
+    expect(fakes.crypto!.deriveAuthKeyFromLogin).toHaveBeenCalledWith(loginKey, expectedIdBytes)
+    expect(fakes.crypto!.deriveEncryptionKeyFromLogin).toHaveBeenCalledWith(loginKey, expectedIdBytes)
     expect(fakes.secretStore.state.loginKeys.get(IDENTITY_ID)).toEqual(loginKey)
   })
 
