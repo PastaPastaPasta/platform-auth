@@ -1,3 +1,4 @@
+import { sha256 } from '@noble/hashes/sha2.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   FakePublicKeyCredential,
@@ -89,7 +90,7 @@ describe('getPrfAssertionForCredentials', () => {
     expect(result.credentialId).toEqual(CREDENTIAL_ID)
     expect(result.prfOutput).toEqual(prfFirst)
     expect(result.rpId).toBe(RP_ID)
-    expect(result.credentialIdHash).toHaveLength(32)
+    expect(result.credentialIdHash).toEqual(sha256(CREDENTIAL_ID))
     expect(result.prfInput).toEqual(new Uint8Array([9, 9, 9]))
   })
 
@@ -112,8 +113,8 @@ describe('getPrfAssertionForCredentials', () => {
     expect(call.publicKey.userVerification).toBe('required')
     expect(call.publicKey.extensions.prf.evalByCredential).toBeDefined()
     const evalMap = call.publicKey.extensions.prf.evalByCredential as Record<string, { first: Uint8Array }>
-    const onlyKey = Object.keys(evalMap)[0]
-    expect(evalMap[onlyKey].first).toEqual(prfInput)
+    expect(Object.keys(evalMap)).toEqual(['AQIDBAU'])
+    expect(evalMap.AQIDBAU.first).toEqual(prfInput)
   })
 
   it('throws when navigator.credentials.get returns null', async () => {
@@ -306,7 +307,7 @@ describe('selectDiscoverablePasskey', () => {
     expect(result.credentialId).toEqual(CREDENTIAL_ID)
     expect(result.userHandle).toBe('user-handle-string')
     expect(result.rpId).toBe(RP_ID)
-    expect(result.credentialIdHash).toHaveLength(32)
+    expect(result.credentialIdHash).toEqual(sha256(CREDENTIAL_ID))
   })
 
   it('returns userHandle=undefined when the assertion does not carry one', async () => {

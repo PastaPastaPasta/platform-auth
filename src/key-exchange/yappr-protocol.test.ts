@@ -108,7 +108,9 @@ describe('AES-GCM round-trip via decryptYapprLoginKey', () => {
     const sharedSecret = deriveYapprSharedSecret(APP_PRIVATE_KEY, WALLET_PUBLIC_KEY)
     const encrypted = await encryptLoginKeyForFixture(LOGIN_KEY, sharedSecret, FIXED_NONCE)
     encrypted[encrypted.length - 1] ^= 0xff
-    await expect(decryptYapprLoginKey(encrypted, sharedSecret)).rejects.toBeDefined()
+    await expect(decryptYapprLoginKey(encrypted, sharedSecret)).rejects.toMatchObject({
+      name: 'OperationError',
+    })
   })
 })
 

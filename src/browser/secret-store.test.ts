@@ -89,16 +89,18 @@ describe('createBrowserSecretStore — Uint8Array round-trip via base64', () => 
     store.storeLoginKey(IDENTITY_ID, loginKey)
 
     const raw = JSON.parse(localStorage.getItem(`platform_auth_secure_lk_${IDENTITY_ID}`) ?? 'null')
-    expect(typeof raw).toBe('string')
+    expect(raw).toBe(Buffer.from(loginKey).toString('base64'))
     expect(store.getLoginKeyBytes(IDENTITY_ID)).toEqual(loginKey)
     expect(store.hasLoginKey(IDENTITY_ID)).toBe(true)
   })
 
-  it('vault DEK round-trips through base64 too', () => {
+  it('vault DEKs serialize to base64 in storage and deserialize back to bytes', () => {
     const store = makeStore()
     const dek = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3])
     store.storeAuthVaultDek(IDENTITY_ID, dek)
 
+    const raw = JSON.parse(localStorage.getItem(`platform_auth_secure_avd_${IDENTITY_ID}`) ?? 'null')
+    expect(raw).toBe(Buffer.from(dek).toString('base64'))
     expect(store.getAuthVaultDekBytes(IDENTITY_ID)).toEqual(dek)
     expect(store.hasAuthVaultDek(IDENTITY_ID)).toBe(true)
   })
