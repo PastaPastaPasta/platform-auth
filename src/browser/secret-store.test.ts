@@ -80,6 +80,13 @@ describe('createBrowserSecretStore — private keys', () => {
     expect(localStorage.getItem(`a_pk_${IDENTITY_ID}`)).toBe('"wif-A"')
     expect(localStorage.getItem(`b_pk_${IDENTITY_ID}`)).toBe('"wif-B"')
   })
+
+  it('returns null when the stored JSON is invalid', () => {
+    const store = makeStore()
+    localStorage.setItem(`platform_auth_secure_pk_${IDENTITY_ID}`, '{"broken"')
+
+    expect(store.getPrivateKey(IDENTITY_ID)).toBeNull()
+  })
 })
 
 describe('createBrowserSecretStore — Uint8Array round-trip via base64', () => {
@@ -238,6 +245,30 @@ describe('createBrowserSecretStore — sessionStorage legacy migration', () => {
       JSON.stringify('legacy-wif'),
     )
     expect(store.hasPrivateKey(IDENTITY_ID)).toBe(true)
+  })
+
+  it('secureStorage.clear removes only prefixed entries from both localStorage and sessionStorage', () => {
+    const store = makeStore()
+    localStorage.setItem(`platform_auth_secure_pk_${IDENTITY_ID}`, JSON.stringify('local-wif'))
+    sessionStorage.setItem(`platform_auth_secure_lk_${IDENTITY_ID}`, JSON.stringify('legacy-login'))
+    localStorage.setItem('unrelated_key', JSON.stringify('keep-local'))
+    sessionStorage.setItem('other_unrelated_key', JSON.stringify('keep-session'))
+
+    store.secureStorage.clear()
+
+    expect(localStorage.getItem(`platform_auth_secure_pk_${IDENTITY_ID}`)).toBeNull()
+    expect(sessionStorage.getItem(`platform_auth_secure_lk_${IDENTITY_ID}`)).toBeNull()
+    expect(localStorage.getItem('unrelated_key')).toBe('"keep-local"')
+    expect(sessionStorage.getItem('other_unrelated_key')).toBe('"keep-session"')
+  })
+
+  it('secureStorage.size counts unique prefixed keys across localStorage and sessionStorage', () => {
+    const store = makeStore()
+    localStorage.setItem(`platform_auth_secure_pk_${IDENTITY_ID}`, JSON.stringify('local-wif'))
+    sessionStorage.setItem(`platform_auth_secure_pk_${IDENTITY_ID}`, JSON.stringify('legacy-wif'))
+    sessionStorage.setItem(`platform_auth_secure_lk_${IDENTITY_ID}`, JSON.stringify('legacy-login'))
+
+    expect(store.secureStorage.size()).toBe(2)
   })
 })
 

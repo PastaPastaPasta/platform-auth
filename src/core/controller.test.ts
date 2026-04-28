@@ -158,6 +158,33 @@ describe('PlatformAuthController.restoreSession', () => {
       vi.useRealTimers()
     }
   })
+
+  it('logs balance-refresh failures without throwing when the background refresh task rejects', async () => {
+    vi.useFakeTimers()
+    try {
+      const fakes = createFakeDependencies({
+        quietBackground: false,
+        balanceRefreshMs: 1000,
+      })
+      const refreshError = new Error('balance backend offline')
+      fakes.sessionStore.state.snapshot = makeSnapshot()
+      fakes.secretStore.state.privateKeys.set(IDENTITY_ID, PRIVATE_KEY)
+      vi.mocked(fakes.identity.getBalance).mockRejectedValue(refreshError)
+
+      const controller = new PlatformAuthController(fakes.deps)
+      await controller.restoreSession()
+
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(vi.mocked(fakes.logger.error)).toHaveBeenCalledWith(
+        'platform-auth: balance refresh failed',
+        refreshError,
+      )
+      expect(controller.getState().user?.identityId).toBe(IDENTITY_ID)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('PlatformAuthController.loginWithAuthKey', () => {
@@ -655,6 +682,84 @@ describe('PlatformAuthController vault enrollment recovery branches', () => {
     expect(fakes.vault!.unlockWithPrf).toHaveBeenCalledWith(IDENTITY_ID, access, prfOutput)
   })
 
+  it('throws when an existing vault requires a passkey unlock but no passkey adapter is configured', async () => {
+    const fakes = createFakeDependencies({
+      withVault: true,
+      withPasskeys: false,
+      identityRecords: new Map([[IDENTITY_ID, makeIdentityRecord(IDENTITY_ID)]]),
+      usernameMap: new Map([[IDENTITY_ID, 'alice']]),
+      profiles: new Set([IDENTITY_ID]),
+    })
+    fakes.vault!.vaults.set(IDENTITY_ID, {
+      version: 1,
+      identityId: IDENTITY_ID,
+      network: 'testnet',
+      secretKind: 'auth-key',
+      source: 'direct-key',
+      updatedAt: 0,
+    })
+    fakes.vault!.status.set(IDENTITY_ID, {
+      configured: true,
+      hasVault: true,
+      hasPasswordAccess: false,
+      passkeyCount: 1,
+      hasEncryptionKey: false,
+      hasTransferKey: false,
+    })
+
+    const controller = new PlatformAuthController(fakes.deps)
+    await controller.loginWithAuthKey(IDENTITY_ID, PRIVATE_KEY)
+
+    await expect(
+      controller.createOrUpdateVaultFromAuthKey(IDENTITY_ID, 'wif-extra'),
+    ).rejects.toThrow(/Passkeys are required to unlock this auth vault/)
+  })
+
+  it('throws when a passkey assertion succeeds but does not match any registered vault access', async () => {
+    const fakes = setupVaultLoggedIn()
+    fakes.vault!.vaults.set(IDENTITY_ID, {
+      version: 1,
+      identityId: IDENTITY_ID,
+      network: 'testnet',
+      secretKind: 'auth-key',
+      source: 'direct-key',
+      updatedAt: 0,
+    })
+    fakes.vault!.status.set(IDENTITY_ID, {
+      configured: true,
+      hasVault: true,
+      hasPasswordAccess: false,
+      passkeyCount: 1,
+      hasEncryptionKey: false,
+      hasTransferKey: false,
+    })
+    vi.mocked(fakes.vault!.getPasskeyAccesses).mockResolvedValueOnce([
+      {
+        $id: 'a-1',
+        $ownerId: IDENTITY_ID,
+        label: 'Device',
+        credentialId: new Uint8Array([1]),
+        credentialIdHash: new Uint8Array([2]),
+        prfInput: new Uint8Array([3]),
+        rpId: 'example.test',
+      },
+    ])
+    vi.mocked(fakes.passkeys!.getPrfAssertionForCredentials).mockResolvedValueOnce({
+      credentialId: new Uint8Array([1]),
+      credentialIdHash: new Uint8Array([9]),
+      prfInput: new Uint8Array([3]),
+      prfOutput: new Uint8Array([99]),
+      rpId: 'example.test',
+    })
+
+    const controller = new PlatformAuthController(fakes.deps)
+    await controller.loginWithAuthKey(IDENTITY_ID, PRIVATE_KEY)
+
+    await expect(
+      controller.createOrUpdateVaultFromAuthKey(IDENTITY_ID, 'wif-extra'),
+    ).rejects.toThrow(/selected passkey is not registered for this account on this site/i)
+  })
+
   it('throws when an existing vault has passkey accesses but none are registered for the current rpId', async () => {
     const fakes = setupVaultLoggedIn()
     fakes.vault!.vaults.set(IDENTITY_ID, {
@@ -741,6 +846,62 @@ describe('PlatformAuthController vault enrollment recovery branches', () => {
     expect(fakes.crypto!.deriveEncryptionKeyFromLogin).toHaveBeenCalledWith(loginKey, expectedIdBytes)
     expect(fakes.secretStore.state.loginKeys.get(IDENTITY_ID)).toEqual(loginKey)
   })
+
+  it('loginWithPassword throws when a login-key vault bundle is missing its loginKey secret', async () => {
+    const fakes = createFakeDependencies({
+      withVault: true,
+      identityRecords: new Map([[IDENTITY_ID, makeIdentityRecord(IDENTITY_ID)]]),
+      usernameMap: new Map([[IDENTITY_ID, 'alice']]),
+      profiles: new Set([IDENTITY_ID]),
+    })
+    const unlocked = makeVaultUnlockResult(IDENTITY_ID, { authKeyWif: undefined })
+    unlocked.bundle.secretKind = 'login-key'
+    unlocked.bundle.loginKey = undefined
+    vi.mocked(fakes.vault!.unlockWithPassword).mockResolvedValueOnce(unlocked)
+
+    const controller = new PlatformAuthController(fakes.deps)
+
+    await expect(controller.loginWithPassword('alice', 'pw')).rejects.toThrow(
+      /Auth vault is missing the wallet login secret/,
+    )
+  })
+
+  it('loginWithPassword throws when an auth-key vault bundle is missing authKeyWif', async () => {
+    const fakes = createFakeDependencies({
+      withVault: true,
+      identityRecords: new Map([[IDENTITY_ID, makeIdentityRecord(IDENTITY_ID)]]),
+      usernameMap: new Map([[IDENTITY_ID, 'alice']]),
+      profiles: new Set([IDENTITY_ID]),
+    })
+    const unlocked = makeVaultUnlockResult(IDENTITY_ID, { authKeyWif: 'wif-vault-auth' })
+    unlocked.bundle.secretKind = 'auth-key'
+    unlocked.bundle.authKeyWif = undefined
+    vi.mocked(fakes.vault!.unlockWithPassword).mockResolvedValueOnce(unlocked)
+
+    const controller = new PlatformAuthController(fakes.deps)
+
+    await expect(controller.loginWithPassword('alice', 'pw')).rejects.toThrow(
+      /Auth vault is missing the authentication key/,
+    )
+  })
+
+  it('loginWithPassword persists transfer keys from an unlocked vault bundle', async () => {
+    const fakes = createFakeDependencies({
+      withVault: true,
+      identityRecords: new Map([[IDENTITY_ID, makeIdentityRecord(IDENTITY_ID)]]),
+      usernameMap: new Map([[IDENTITY_ID, 'alice']]),
+      profiles: new Set([IDENTITY_ID]),
+    })
+    const unlocked = makeVaultUnlockResult(IDENTITY_ID, { authKeyWif: 'wif-vault-auth' })
+    unlocked.bundle.transferKeyWif = 'wif-transfer'
+    vi.mocked(fakes.vault!.unlockWithPassword).mockResolvedValueOnce(unlocked)
+
+    const controller = new PlatformAuthController(fakes.deps)
+    const result = await controller.loginWithPassword('alice', 'pw')
+
+    expect(result.intent).toEqual({ kind: 'ready', identityId: IDENTITY_ID })
+    expect(fakes.secretStore.state.transferKeys.get(IDENTITY_ID)).toBe('wif-transfer')
+  })
 })
 
 describe('PlatformAuthController.loginWithLoginKey', () => {
@@ -799,6 +960,26 @@ describe('PlatformAuthController.loginWithLoginKey', () => {
     expect(vi.mocked(fakes.logger.warn)).toHaveBeenCalledWith(
       expect.stringContaining('failed to'),
       vaultError,
+    )
+  })
+
+  it('logs the merge-secrets warning but still resolves when only the merge step fails', async () => {
+    const fakes = createFakeDependencies({
+      withVault: true,
+      identityRecords: new Map([[IDENTITY_ID, makeIdentityRecord(IDENTITY_ID)]]),
+      usernameMap: new Map([[IDENTITY_ID, 'alice']]),
+      profiles: new Set([IDENTITY_ID]),
+    })
+    const mergeError = new Error('merge offline')
+    vi.mocked(fakes.vault!.mergeSecrets).mockRejectedValueOnce(mergeError)
+
+    const controller = new PlatformAuthController(fakes.deps)
+    const result = await controller.loginWithLoginKey(IDENTITY_ID, new Uint8Array(32).fill(7), 0)
+
+    expect(result.intent).toEqual({ kind: 'ready', identityId: IDENTITY_ID })
+    expect(vi.mocked(fakes.logger.warn)).toHaveBeenCalledWith(
+      'platform-auth: failed to merge login-key secrets into vault',
+      mergeError,
     )
   })
 
@@ -932,6 +1113,15 @@ describe('PlatformAuthController vault management', () => {
       IDENTITY_ID,
       newDek,
       expect.objectContaining({ encryptionKeyWif: 'wif-encryption' }),
+    )
+  })
+
+  it('throws when no active login secret is available for auth vault enrollment', async () => {
+    const fakes = createFakeDependencies({ withVault: true })
+    const controller = new PlatformAuthController(fakes.deps)
+
+    await expect(controller.createOrUpdateVaultFromAuthKey(IDENTITY_ID, '')).rejects.toThrow(
+      /No active login secret is available for auth vault enrollment/,
     )
   })
 
