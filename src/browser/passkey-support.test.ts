@@ -13,11 +13,24 @@ function setUserAgent(userAgent: string, platform = 'MacIntel'): void {
   })
 }
 
+const ORIGINAL_SECURE_CONTEXT_DESCRIPTOR = Object.getOwnPropertyDescriptor(
+  window,
+  'isSecureContext',
+)
+
 function setSecureContext(value: boolean): void {
   Object.defineProperty(window, 'isSecureContext', {
     value,
     configurable: true,
   })
+}
+
+function restoreSecureContext(): void {
+  if (ORIGINAL_SECURE_CONTEXT_DESCRIPTOR) {
+    Object.defineProperty(window, 'isSecureContext', ORIGINAL_SECURE_CONTEXT_DESCRIPTOR)
+  } else {
+    delete (window as { isSecureContext?: boolean }).isSecureContext
+  }
 }
 
 function installPublicKeyCredential(statics: PublicKeyCredentialStatics): void {
@@ -32,7 +45,7 @@ function removePublicKeyCredential(): void {
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  setSecureContext(true)
+  restoreSecureContext()
 })
 
 describe('getPasskeyPrfSupport — environment guards', () => {

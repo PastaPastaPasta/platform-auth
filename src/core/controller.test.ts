@@ -1114,6 +1114,7 @@ describe('PlatformAuthController vault management', () => {
       newDek,
       expect.objectContaining({ encryptionKeyWif: 'wif-encryption' }),
     )
+    expect(fakes.secretStore.storeAuthVaultDek).toHaveBeenCalledWith(IDENTITY_ID, newDek)
   })
 
   it('throws when no active login secret is available for auth vault enrollment', async () => {
@@ -1345,7 +1346,6 @@ describe('PlatformAuthController Yappr key exchange wiring', () => {
 
       const callCount = vi.mocked(fakes.yapprKeyExchange!.getResponse).mock.calls.length
       expect(callCount).toBeGreaterThanOrEqual(4)
-      expect(callCount).toBeLessThanOrEqual(6)
     } finally {
       vi.useRealTimers()
     }

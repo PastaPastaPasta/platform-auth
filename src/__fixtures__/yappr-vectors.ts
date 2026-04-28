@@ -8,7 +8,12 @@ export function hexToBytes(hex: string): Uint8Array {
   }
   const out = new Uint8Array(clean.length / 2)
   for (let i = 0; i < out.length; i += 1) {
-    out[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16)
+    const slice = clean.slice(i * 2, i * 2 + 2)
+    const byte = Number.parseInt(slice, 16)
+    if (Number.isNaN(byte)) {
+      throw new Error(`hex contains non-hex characters at position ${i * 2}: ${slice}`)
+    }
+    out[i] = byte
   }
   return out
 }

@@ -95,16 +95,22 @@ export function createFakeSecretStore(): SecretStore & { state: FakeSecretStoreS
       state.transferKeys.delete(id)
     }),
     storeLoginKey: vi.fn(async (id, key) => {
-      state.loginKeys.set(id, key)
+      state.loginKeys.set(id, new Uint8Array(key))
     }),
-    getLoginKey: vi.fn(async (id) => state.loginKeys.get(id) ?? null),
+    getLoginKey: vi.fn(async (id) => {
+      const v = state.loginKeys.get(id)
+      return v ? new Uint8Array(v) : null
+    }),
     clearLoginKey: vi.fn(async (id) => {
       state.loginKeys.delete(id)
     }),
     storeAuthVaultDek: vi.fn(async (id, dek) => {
-      state.vaultDeks.set(id, dek)
+      state.vaultDeks.set(id, new Uint8Array(dek))
     }),
-    getAuthVaultDek: vi.fn(async (id) => state.vaultDeks.get(id) ?? null),
+    getAuthVaultDek: vi.fn(async (id) => {
+      const v = state.vaultDeks.get(id)
+      return v ? new Uint8Array(v) : null
+    }),
     clearAuthVaultDek: vi.fn(async (id) => {
       state.vaultDeks.delete(id)
     }),
