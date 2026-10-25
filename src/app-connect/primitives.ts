@@ -11,14 +11,14 @@ import { sha256 } from '@noble/hashes/sha2.js'
  * the key-exchange module in the package root.
  */
 
-export type AppConnectNetworkName = 'testnet' | 'mainnet' | 'devnet'
-
 /** The one-letter network id carried in the `n=` parameter of an App Connect URI. */
 export const APP_CONNECT_NETWORK_IDS = {
   mainnet: 'm',
   testnet: 't',
   devnet: 'd',
 } as const
+
+export type AppConnectNetworkName = keyof typeof APP_CONNECT_NETWORK_IDS
 
 const encoder = new TextEncoder()
 const NO_HKDF_INFO = new Uint8Array(0)
