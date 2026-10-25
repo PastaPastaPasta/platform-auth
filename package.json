@@ -19,6 +19,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./app-connect": {
+      "types": "./dist/app-connect/index.d.ts",
+      "import": "./dist/app-connect/index.js",
+      "require": "./dist/app-connect/index.cjs"
     }
   },
   "files": [
