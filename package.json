@@ -19,6 +19,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./passkey-vault": {
+      "types": "./dist/passkey-vault/index.d.ts",
+      "import": "./dist/passkey-vault/index.js",
+      "require": "./dist/passkey-vault/index.cjs"
     }
   },
   "files": [
@@ -29,7 +34,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.passkey-vault.json",
     "test": "vitest run",
     "test:verbose": "vitest run --reporter=verbose",
     "test:watch": "vitest",

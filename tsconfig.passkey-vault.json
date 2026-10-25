@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "strict": true
+  },
+  "include": ["src/passkey-vault/**/*.ts"]
+}

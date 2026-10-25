@@ -40,6 +40,7 @@ This keeps the auth engine reusable across multiple apps with different onboardi
 - `PlatformAuthProvider` and `usePlatformAuth`: React bindings for consuming controller state
 - typed adapter interfaces: contracts for storage, identity lookup, usernames, vaults, passkeys, and side effects
 - Yappr-compatible key-exchange module: protocol helpers, transport polling, registration helpers, and React hooks
+- `@pastapastapasta/platform-auth/passkey-vault`: an on-chain passkey vault core (HPKE + WebAuthn PRF, no SDK, no React); see [`docs/passkey-vault.md`](./docs/passkey-vault.md)
 
 ## Integration Model
 
