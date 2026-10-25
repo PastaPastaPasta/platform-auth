@@ -270,6 +270,73 @@ describe('tools/vendor.mjs', () => {
     assert.match(f.status('--against', 'WORKTREE').out, /from a dirty worktree/)
   })
 
+  it('finds imports behind trailing comments, strings that look like comments, and test mocks', () => {
+    const f = fixture()
+    write(path.join(f.repo, 'src/c/tricky.ts'), [
+      "const glob = 'src/*'",
+      'import {',
+      "  one, // don't use two; or three",
+      "} from '../a/x'",
+      '/** doc */',
+      "vi.mock('../outside/mocked', () => ({}))",
+      '// import { nope } from "../not/an/import"',
+      "export const note = 'see // import x from \"../in/a/string\"'",
+      '',
+    ].join('\n'))
+    git(f.repo, 'add', 'src/c/tricky.ts')
+    git(f.repo, 'commit', '-q', '-m', 'tricky')
+    const result = f.sync('--modules', 'a,c')
+    assert.notEqual(result.status, 0)
+    assert.match(result.err, /src\/c\/tricky\.ts: import '\.\.\/outside\/mocked'/)
+    assert.doesNotMatch(result.err, /not\/an\/import|in\/a\/string/)
+    assert.doesNotMatch(result.err, /'\.\.\/a\/x'/, 'the multi-line import into module a is allowed')
+  })
+
+  it('never writes through a symlink, even with --force', () => {
+    const f = fixture()
+    f.sync('--modules', 'a')
+    const outside = path.join(f.root, 'outside.txt')
+    fs.writeFileSync(outside, 'precious')
+    fs.rmSync(path.join(f.target, 'a/x.ts'))
+    fs.symlinkSync(outside, path.join(f.target, 'a/x.ts'))
+    const result = f.sync('--modules', 'a', '--force')
+    assert.notEqual(result.status, 0)
+    assert.match(result.err, /symlink/)
+    assert.equal(fs.readFileSync(outside, 'utf8'), 'precious')
+  })
+
+  it('handles a file turning into a directory upstream', () => {
+    const f = fixture()
+    f.commitUpstream('src/a/thing', 'a file\n')
+    f.sync('--modules', 'a')
+    git(f.repo, 'rm', '-q', 'src/a/thing')
+    write(path.join(f.repo, 'src/a/thing/inner.ts'), 'export {}\n')
+    git(f.repo, 'add', 'src/a/thing/inner.ts')
+    git(f.repo, 'commit', '-q', '-m', 'file to dir')
+    const result = f.sync('--modules', 'a')
+    assert.equal(result.status, 0, result.err)
+    assert.equal(fs.readFileSync(path.join(f.target, 'a/thing/inner.ts'), 'utf8'), 'export {}\n')
+    assert.deepEqual(Object.keys(f.manifest().modules.a.files), ['thing/inner.ts', 'x.ts'])
+  })
+
+  it('rejects a manifest with an invalid commit or hash', () => {
+    const f = fixture()
+    f.sync('--modules', 'a')
+    const good = f.manifest()
+    for (const mutate of [
+      (m) => { m.modules.a.commit = 'main' },
+      (m) => { m.modules.a.files['x.ts'] = 'sha256-nope' },
+      (m) => { m.schema = 2 },
+    ]) {
+      const bad = structuredClone(good)
+      mutate(bad)
+      fs.writeFileSync(path.join(f.target, 'VENDORED.json'), JSON.stringify(bad))
+      const result = f.status()
+      assert.notEqual(result.status, 0)
+      assert.match(result.err, /malformed/)
+    }
+  })
+
   it('rejects bad usage with exit 2', () => {
     const f = fixture()
     assert.equal(f.sync().status, 2)

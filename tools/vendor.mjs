@@ -97,11 +97,9 @@ function git(repo, args, { buffer = false, optional = false } = {}) {
 
 /** A readable source: a commit in the checkout, or the files on disk. */
 function resolveSource(repo, ref) {
-  if (ref === WORKTREE) {
-    return { kind: 'worktree', ref, commit: git(repo, ['rev-parse', '--verify', 'HEAD^{commit}']).trim(), dirty: true }
-  }
-  const commit = git(repo, ['rev-parse', '--verify', `${ref}^{commit}`]).trim()
-  return { kind: 'git', ref, commit, dirty: false }
+  const worktree = ref === WORKTREE
+  const commit = git(repo, ['rev-parse', '--verify', `${worktree ? 'HEAD' : ref}^{commit}`]).trim()
+  return { kind: worktree ? 'worktree' : 'git', ref, commit }
 }
 
 /** Files of src/<module>/ as Map(relative posix path -> Buffer). */
@@ -149,6 +147,10 @@ function sha256(buffer) {
   return `sha256-${createHash('sha256').update(buffer).digest('hex')}`
 }
 
+function hashFiles(files) {
+  return new Map([...files].map(([rel, content]) => [rel, sha256(content)]))
+}
+
 /** Hashes of the files currently under <target>/<module>/. */
 function readDiskHashes(targetDir, moduleName) {
   const root = path.join(targetDir, moduleName)
@@ -157,16 +159,31 @@ function readDiskHashes(targetDir, moduleName) {
   return hashes
 }
 
+/**
+ * Where `rel` lives under <target>/<module>/. Refuses a path that leaves the
+ * module, and one that goes through a symlink (a write would land elsewhere).
+ */
 function moduleFilePath(targetDir, moduleName, rel) {
   const root = path.resolve(targetDir, moduleName)
   const full = path.resolve(root, ...rel.split('/'))
   if (full !== root && !full.startsWith(root + path.sep)) throw new UserError(`refusing to write outside ${root}: ${rel}`)
+  let current = root
+  for (const part of path.relative(root, full).split(path.sep)) {
+    current = path.join(current, part)
+    let stat
+    try {
+      stat = fs.lstatSync(current)
+    } catch (error) {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') break
+      throw error
+    }
+    if (stat.isSymbolicLink()) throw new UserError(`refusing to touch ${current}: it is a symlink`)
+  }
   return full
 }
 
-function removeEmptyParents(targetDir, moduleName, rel) {
-  const root = path.resolve(targetDir, moduleName)
-  let dir = path.dirname(moduleFilePath(targetDir, moduleName, rel))
+function removeEmptyParents(root, file) {
+  let dir = path.dirname(file)
   while (dir !== root && dir.startsWith(root + path.sep)) {
     try {
       fs.rmdirSync(dir)
@@ -179,6 +196,10 @@ function removeEmptyParents(targetDir, moduleName, rel) {
 
 // ---------------------------------------------------------------- manifest
 
+function isRecord(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
 function sortKeys(value) {
   if (Array.isArray(value)) return value.map(sortKeys)
   if (value && typeof value === 'object') {
@@ -187,8 +208,8 @@ function sortKeys(value) {
   return value
 }
 
-function serializeManifest(manifest) {
-  return `${JSON.stringify(sortKeys(manifest), null, 2)}\n`
+function toJson(value) {
+  return `${JSON.stringify(sortKeys(value), null, 2)}\n`
 }
 
 function readManifest(targetDir) {
@@ -207,14 +228,18 @@ function readManifest(targetDir) {
   } catch (error) {
     throw bad(error.message)
   }
-  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) throw bad('not an object')
+  if (!isRecord(manifest)) throw bad('not an object')
   if (manifest.schema !== 1) throw bad(`unsupported schema ${JSON.stringify(manifest.schema)}`)
-  if (!manifest.modules || typeof manifest.modules !== 'object' || Array.isArray(manifest.modules)) {
-    throw bad('"modules" is missing')
-  }
+  if (!isRecord(manifest.modules)) throw bad('"modules" is missing')
+  // Null-prototype maps, so a file or module named like an Object.prototype member cannot alias it.
+  manifest.modules = Object.assign(Object.create(null), manifest.modules)
   for (const [name, entry] of Object.entries(manifest.modules)) {
-    if (!entry || typeof entry.commit !== 'string') throw bad(`module ${name} has no commit`)
-    if (!entry.files || typeof entry.files !== 'object' || Array.isArray(entry.files)) throw bad(`module ${name} has no files`)
+    if (!isRecord(entry) || !/^[0-9a-f]{40,64}$/.test(entry.commit)) throw bad(`module ${name} has no valid commit`)
+    if (!isRecord(entry.files)) throw bad(`module ${name} has no files`)
+    for (const [rel, hash] of Object.entries(entry.files)) {
+      if (typeof hash !== 'string' || !/^sha256-[0-9a-f]{64}$/.test(hash)) throw bad(`module ${name}: bad hash for ${rel}`)
+    }
+    entry.files = Object.assign(Object.create(null), entry.files)
   }
   return manifest
 }
@@ -241,15 +266,44 @@ function upstreamInfo(repo) {
 
 // ----------------------------------------------------------- import check
 
+/**
+ * Removes comments but keeps string and template literals intact (they hold the
+ * specifiers), skipping over them so a `//` or `/*` inside a string is not
+ * mistaken for a comment. A regex literal containing a quote can derail this
+ * for the rest of its line; that is accepted.
+ */
 function stripComments(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, '')
+  let out = ''
+  let i = 0
+  while (i < source.length) {
+    const ch = source[i]
+    const next = source[i + 1]
+    if (ch === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i++
+    } else if (ch === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2)
+      i = end === -1 ? source.length : end + 2
+      out += ' '
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      let j = i + 1
+      while (j < source.length && source[j] !== ch && !(ch !== '`' && source[j] === '\n')) j += source[j] === '\\' ? 2 : 1
+      out += source.slice(i, j + 1)
+      i = j + 1
+    } else {
+      out += ch
+      i++
+    }
+  }
+  return out
 }
 
 const IMPORT_PATTERNS = [
   /(?:^|[\n;])\s*(?:import|export)\s[^'"`;]*?\bfrom\s*['"]([^'"\n]+)['"]/g,
   /(?:^|[\n;])\s*import\s*['"]([^'"\n]+)['"]/g,
-  /\bimport\s*\(\s*['"]([^'"\n]+)['"]\s*\)/g,
+  /\bimport\s*\(\s*['"`]([^'"`\n$]+)['"`]\s*\)/g,
   /\brequire\s*\(\s*['"]([^'"\n]+)['"]\s*\)/g,
+  // Test-runner module mocks name modules too.
+  /\b(?:vi|jest)\.(?:mock|doMock|importActual|importMock)\s*\(\s*['"]([^'"\n]+)['"]/g,
 ]
 
 function importSpecifiers(source) {
@@ -259,6 +313,11 @@ function importSpecifiers(source) {
     for (const match of text.matchAll(pattern)) found.add(match[1])
   }
   return [...found]
+}
+
+/** `node:` and bare builtins, URL-like specifiers, and `#` subpath imports are not packages to install. */
+function isBuiltinOrUrl(specifier) {
+  return BUILTINS.has(specifier) || /^[a-z][a-z0-9+.-]*:/i.test(specifier) || specifier.startsWith('#')
 }
 
 function packageName(specifier) {
@@ -286,10 +345,8 @@ function checkImports(moduleName, files, moduleSet) {
         errors.push(
           `${from}: import '${specifier}' resolves to ${resolved}, outside the vendored modules (${[...moduleSet].join(', ')})`,
         )
-      } else if (specifier.startsWith('node:') || BUILTINS.has(specifier) || /^[a-z][a-z0-9+.-]*:/i.test(specifier) || specifier.startsWith('#')) {
-        continue
-      } else {
-        ;(TEST_FILE.test(rel) ? testExternals : externals).add(packageName(specifier))
+      } else if (!isBuiltinOrUrl(specifier)) {
+        (TEST_FILE.test(rel) ? testExternals : externals).add(packageName(specifier))
       }
     }
   }
@@ -312,7 +369,12 @@ function missingDependencies(targetDir, names) {
   if (names.length === 0) return { file: null, missing: [] }
   const file = nearestPackageJson(targetDir)
   if (!file) return { file: null, missing: names }
-  const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
+  let pkg
+  try {
+    pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (error) {
+    throw new UserError(`cannot read ${file}: ${error.message}`)
+  }
   const declared = new Set(
     ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].flatMap((key) => Object.keys(pkg[key] ?? {})),
   )
@@ -322,12 +384,12 @@ function missingDependencies(targetDir, names) {
 // -------------------------------------------------------------------- sync
 
 /** Decides, per file, what a sync does. Pure: no writes. */
-function planModule({ upstream, upstreamHashes, manifestFiles, diskHashes, mode }) {
+function planModule({ upstreamHashes, manifestFiles, diskHashes, mode }) {
   const write = []
   const remove = []
   const unchanged = []
   const conflicts = []
-  const rels = new Set([...upstream.keys(), ...Object.keys(manifestFiles)])
+  const rels = new Set([...upstreamHashes.keys(), ...Object.keys(manifestFiles)])
   for (const rel of [...rels].sort()) {
     const wanted = upstreamHashes.get(rel)
     const recorded = manifestFiles[rel]
@@ -350,11 +412,11 @@ function planModule({ upstream, upstreamHashes, manifestFiles, diskHashes, mode 
   }
   const kept = []
   if (mode === 'force') {
-    for (const { rel } of conflicts) (upstream.has(rel) ? write : remove).push(rel)
+    for (const { rel } of conflicts) (upstreamHashes.has(rel) ? write : remove).push(rel)
   } else if (mode === 'keep-local') {
     for (const { rel } of conflicts) kept.push(rel)
   }
-  return { write: write.sort(), remove: remove.sort(), unchanged, conflicts, kept: kept.sort() }
+  return { write: write.sort(), remove: remove.sort(), unchanged, conflicts, kept }
 }
 
 function runSync(positional, flags, repo) {
@@ -386,9 +448,9 @@ function runSync(positional, flags, repo) {
     }
     const checked = checkImports(name, upstream, moduleSet)
     errors.push(...checked.errors)
-    const upstreamHashes = new Map([...upstream].map(([rel, content]) => [rel, sha256(content)]))
-    const manifestFiles = manifest?.modules[name]?.files ?? {}
-    const plan = planModule({ upstream, upstreamHashes, manifestFiles, diskHashes: readDiskHashes(targetDir, name), mode })
+    const upstreamHashes = hashFiles(upstream)
+    const manifestFiles = manifest?.modules[name]?.files ?? Object.create(null)
+    const plan = planModule({ upstreamHashes, manifestFiles, diskHashes: readDiskHashes(targetDir, name), mode })
     modules.push({ name, upstream, upstreamHashes, checked, plan })
   }
   if (errors.length > 0) throw new UserError(`import check failed, nothing was written:\n  ${errors.join('\n  ')}`)
@@ -401,23 +463,16 @@ function runSync(positional, flags, repo) {
     )
   }
 
+  // Everything that can fail is checked before the first write, so a failed sync leaves the target alone.
   const warnings = []
   const lines = []
   const tag = dryRun ? '[dry-run] ' : ''
   if (source.kind === 'worktree') warnings.push('syncing from WORKTREE: the manifest will record dirty: true and a commit that does not contain these files')
+  for (const { name, plan } of modules) {
+    for (const rel of [...plan.remove, ...plan.write]) moduleFilePath(targetDir, name, rel)
+  }
 
-  for (const { name, upstream, checked, plan } of modules) {
-    if (!dryRun) {
-      for (const rel of plan.write) {
-        const full = moduleFilePath(targetDir, name, rel)
-        fs.mkdirSync(path.dirname(full), { recursive: true })
-        fs.writeFileSync(full, upstream.get(rel))
-      }
-      for (const rel of plan.remove) {
-        fs.rmSync(moduleFilePath(targetDir, name, rel), { force: true })
-        removeEmptyParents(targetDir, name, rel)
-      }
-    }
+  for (const { name, checked, plan } of modules) {
     const { file, missing } = missingDependencies(targetDir, checked.externals)
     if (file === null && missing.length > 0) {
       warnings.push(`${name}: no package.json above ${targetDir}; cannot confirm ${missing.join(', ')} is installed`)
@@ -425,7 +480,7 @@ function runSync(positional, flags, repo) {
       warnings.push(`${name}: ${missing.join(', ')} not listed in ${file}`)
     }
     lines.push(
-      `${tag}${name} @ ${source.commit.slice(0, 12)} (${source.ref}${source.dirty ? ', dirty' : ''}): `
+      `${tag}${name} @ ${source.commit.slice(0, 12)} (${source.ref}${source.kind === 'worktree' ? ', dirty' : ''}): `
       + `${plan.write.length} written, ${plan.unchanged.length} unchanged, ${plan.remove.length} removed, ${plan.kept.length} kept local`,
       `  externals: ${checked.externals.join(', ') || '(none)'}`,
     )
@@ -437,6 +492,23 @@ function runSync(positional, flags, repo) {
   }
 
   if (!dryRun) {
+    // Removals first: a case-only rename (Foo.ts to foo.ts) is the same file on a case-insensitive disk,
+    // and a file turning into a directory (or back) needs the old entry gone before the new one is written.
+    for (const { name, plan } of modules) {
+      const root = path.resolve(targetDir, name)
+      for (const rel of plan.remove) {
+        const full = moduleFilePath(targetDir, name, rel)
+        fs.rmSync(full, { force: true })
+        removeEmptyParents(root, full)
+      }
+    }
+    for (const { name, upstream, plan } of modules) {
+      for (const rel of plan.write) {
+        const full = moduleFilePath(targetDir, name, rel)
+        fs.mkdirSync(path.dirname(full), { recursive: true })
+        fs.writeFileSync(full, upstream.get(rel))
+      }
+    }
     const next = {
       schema: 1,
       upstream: info,
@@ -447,13 +519,13 @@ function runSync(positional, flags, repo) {
       next.modules[name] = {
         commit: source.commit,
         ref: source.ref,
-        dirty: source.dirty,
+        dirty: source.kind === 'worktree',
         externals: checked.externals,
         files: Object.fromEntries(upstreamHashes),
       }
     }
     fs.mkdirSync(targetDir, { recursive: true })
-    fs.writeFileSync(path.join(targetDir, MANIFEST_NAME), serializeManifest(next))
+    fs.writeFileSync(path.join(targetDir, MANIFEST_NAME), toJson(next))
   }
   for (const warning of warnings) process.stderr.write(`warning: ${warning}\n`)
   process.stdout.write(`${lines.join('\n')}\n`)
@@ -463,7 +535,7 @@ function runSync(positional, flags, repo) {
 
 function statusForModule({ repo, targetDir, name, entry, against }) {
   const upstream = readUpstreamFiles(repo, against, name)
-  const upstreamHashes = new Map([...upstream].map(([rel, content]) => [rel, sha256(content)]))
+  const upstreamHashes = hashFiles(upstream)
   const diskHashes = readDiskHashes(targetDir, name)
   const recorded = entry.files
 
@@ -522,10 +594,10 @@ function runStatus(positional, flags, repo) {
   }
 
   if (flags.json) {
-    process.stdout.write(serializeManifest(report))
+    process.stdout.write(toJson(report))
     return
   }
-  const out = [`${targetDir}`, `against ${against.ref} (${against.commit.slice(0, 12)})`]
+  const out = [targetDir, `against ${against.ref} (${against.commit.slice(0, 12)})`]
   for (const [name, mod] of Object.entries(report.modules)) {
     out.push('', `${name}: vendored at ${mod.commit.slice(0, 12)}${mod.ref ? ` (${mod.ref})` : ''}${mod.dirty ? ', from a dirty worktree' : ''}`)
     if (!mod.commitKnown) out.push(`  commit ${mod.commit.slice(0, 12)} is not in this checkout (fetch upstream to count commits)`)

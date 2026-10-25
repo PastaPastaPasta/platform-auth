@@ -57,6 +57,7 @@ Run the sync again with a newer `--from`.
 - `--force` overwrites local edits.
 - A file deleted upstream is removed if clean, and kept and reported if edited.
 - `--dry-run` prints the plan and writes nothing.
+- The tool never writes through a symlink or outside `<targetDir>/<module>/`; it stops before writing anything if a path would.
 
 ## Divergence policy
 
