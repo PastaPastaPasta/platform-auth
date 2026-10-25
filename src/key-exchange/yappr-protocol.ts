@@ -249,7 +249,7 @@ export function parseYapprKeyExchangeUri(uri: string): {
     offset += 33
     const contractId = requestBytes.slice(offset, offset + 32)
     offset += 32
-    const labelLength = requestBytes[offset++]
+    const labelLength = requestBytes[offset++] ?? 0
     if (labelLength > 64 || offset + labelLength > requestBytes.length) {
       return null
     }
