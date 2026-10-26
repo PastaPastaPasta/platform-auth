@@ -42,6 +42,7 @@ This keeps the auth engine reusable across multiple apps with different onboardi
 - Yappr-compatible key-exchange module: protocol helpers, transport polling, registration helpers, and React hooks
 - App Connect v2 module (`src/app-connect/`, also importable as `@pastapastapasta/platform-auth/app-connect`): headless wallet-login protocol core (request encoding, response encryption, candidate polling, verification, session records)
 - `tools/vendor.mjs`: copies modules into an app's repo with a `VENDORED.json` manifest; see [docs/vendoring.md](docs/vendoring.md)
+- `@pastapastapasta/platform-auth/passkey-vault`: an on-chain passkey vault core (HPKE + WebAuthn PRF, no SDK, no React); see [`docs/passkey-vault.md`](./docs/passkey-vault.md)
 
 ## Integration Model
 

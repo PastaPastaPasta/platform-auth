@@ -24,6 +24,11 @@
       "types": "./dist/app-connect/index.d.ts",
       "import": "./dist/app-connect/index.js",
       "require": "./dist/app-connect/index.cjs"
+    },
+    "./passkey-vault": {
+      "types": "./dist/passkey-vault/index.d.ts",
+      "import": "./dist/passkey-vault/index.js",
+      "require": "./dist/passkey-vault/index.cjs"
     }
   },
   "files": [
@@ -34,7 +39,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.passkey-vault.json",
     "test": "vitest run && node --test tools/*.test.mjs",
     "test:tools": "node --test tools/*.test.mjs",
     "test:verbose": "vitest run --reporter=verbose",
@@ -61,6 +66,8 @@
     "react": "^18.2.0 || ^19.0.0"
   },
   "dependencies": {
+    "@noble/ciphers": "^2.0.0",
+    "@noble/curves": "^2.0.0",
     "@noble/hashes": "^2.0.1",
     "@noble/secp256k1": "^3.0.0",
     "bs58": "^6.0.0"
