@@ -228,7 +228,7 @@ describe('useYapprKeyExchangeLogin — happy path through to complete', () => {
     })
 
     expect(fake.pollYapprKeyExchangeResponse).toHaveBeenCalledTimes(1)
-    const [hashArg, privArg, overridesArg, opts] = fake.pollYapprKeyExchangeResponse.mock.calls[0]
+    const [hashArg, privArg, overridesArg, opts] = fake.pollYapprKeyExchangeResponse.mock.calls[0]!
     expect(hashArg).toBeInstanceOf(Uint8Array)
     expect(hashArg).toHaveLength(20)
     expect(privArg).toBeInstanceOf(Uint8Array)
@@ -392,7 +392,7 @@ describe('useYapprKeyExchangeLogin — cancel and retry', () => {
     expect(result.current.error).toBeNull()
     expect(result.current.remainingTime).toBeNull()
 
-    const signal = fake.pollYapprKeyExchangeResponse.mock.calls[0][3].signal as AbortSignal
+    const signal = fake.pollYapprKeyExchangeResponse.mock.calls[0]![3].signal as AbortSignal
     expect(signal.aborted).toBe(true)
 
     await act(async () => {
@@ -426,8 +426,8 @@ describe('useYapprKeyExchangeLogin — cancel and retry', () => {
     expect(fake.getYapprKeyExchangeConfig).toHaveBeenCalledTimes(2)
     expect(fake.getYapprKeyExchangeConfig).toHaveBeenLastCalledWith({ label: 'first-label' })
     expect(fake.pollYapprKeyExchangeResponse).toHaveBeenCalledTimes(2)
-    const firstSignal = fake.pollYapprKeyExchangeResponse.mock.calls[0][3].signal as AbortSignal
-    const secondSignal = fake.pollYapprKeyExchangeResponse.mock.calls[1][3].signal as AbortSignal
+    const firstSignal = fake.pollYapprKeyExchangeResponse.mock.calls[0]![3].signal as AbortSignal
+    const secondSignal = fake.pollYapprKeyExchangeResponse.mock.calls[1]![3].signal as AbortSignal
     expect(firstSignal.aborted).toBe(true)
     expect(secondSignal.aborted).toBe(false)
   })
@@ -443,7 +443,7 @@ describe('useYapprKeyExchangeLogin — unmount cleanup', () => {
       await flushMicrotasks()
     })
 
-    const signal = fake.pollYapprKeyExchangeResponse.mock.calls[0][3].signal as AbortSignal
+    const signal = fake.pollYapprKeyExchangeResponse.mock.calls[0]![3].signal as AbortSignal
     expect(signal.aborted).toBe(false)
 
     unmount()
@@ -514,7 +514,7 @@ describe('useYapprKeyRegistration — initial state and happy path', () => {
     expect(result.current.uri).toMatch(/^dash-st:/)
 
     expect(fake.buildYapprUnsignedKeyRegistrationTransition).toHaveBeenCalledTimes(1)
-    const [requestArg] = fake.buildYapprUnsignedKeyRegistrationTransition.mock.calls[0]
+    const [requestArg] = fake.buildYapprUnsignedKeyRegistrationTransition.mock.calls[0]!
     expect(requestArg.identityId).toBe(IDENTITY_ID_BASE58)
     expect(requestArg.authPrivateKey).toEqual(AUTH_KEY)
     expect(requestArg.encryptionPrivateKey).toEqual(ENC_KEY)
@@ -683,8 +683,8 @@ describe('useYapprKeyRegistration — error, cancel, retry', () => {
     })
 
     expect(fake.buildYapprUnsignedKeyRegistrationTransition).toHaveBeenCalledTimes(2)
-    const [firstCallReq] = fake.buildYapprUnsignedKeyRegistrationTransition.mock.calls[0]
-    const [secondCallReq] = fake.buildYapprUnsignedKeyRegistrationTransition.mock.calls[1]
+    const [firstCallReq] = fake.buildYapprUnsignedKeyRegistrationTransition.mock.calls[0]!
+    const [secondCallReq] = fake.buildYapprUnsignedKeyRegistrationTransition.mock.calls[1]!
     expect(secondCallReq.identityId).toBe(IDENTITY_ID_BASE58)
     expect(secondCallReq.authPrivateKey).toEqual(AUTH_KEY)
     expect(secondCallReq.encryptionPrivateKey).toEqual(ENC_KEY)

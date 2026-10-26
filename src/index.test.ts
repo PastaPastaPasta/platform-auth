@@ -13,6 +13,8 @@ describe('public API surface', () => {
       'PlatformAuthController',
       'PlatformAuthProvider',
       'usePlatformAuth',
+      'verifyAppConnectCandidate',
+      'buildAppConnectUri',
     ]) {
       expect(keys.has(name)).toBe(true)
     }

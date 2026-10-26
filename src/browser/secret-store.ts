@@ -126,7 +126,7 @@ class BrowserStorage {
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = ''
   for (let index = 0; index < bytes.length; index += 1) {
-    binary += String.fromCharCode(bytes[index])
+    binary += String.fromCharCode(bytes[index] ?? 0)
   }
   return btoa(binary)
 }

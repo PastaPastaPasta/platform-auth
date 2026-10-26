@@ -402,7 +402,7 @@ describe('PlatformAuthController.loginWithPassword', () => {
       legacyPasswordRecords: {},
     })
     vi.mocked(fakes.vault!.unlockWithPassword).mockRejectedValueOnce(new Error('vault offline'))
-    fakes.legacyPasswordLogins![0].loginWithPassword = vi.fn(async () => {
+    fakes.legacyPasswordLogins![0]!.loginWithPassword = vi.fn(async () => {
       throw new Error('legacy oops')
     })
 
