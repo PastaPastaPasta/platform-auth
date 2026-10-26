@@ -20,6 +20,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./app-connect": {
+      "types": "./dist/app-connect/index.d.ts",
+      "import": "./dist/app-connect/index.js",
+      "require": "./dist/app-connect/index.cjs"
+    },
     "./passkey-vault": {
       "types": "./dist/passkey-vault/index.d.ts",
       "import": "./dist/passkey-vault/index.js",
@@ -35,7 +40,8 @@
   "scripts": {
     "build": "tsup",
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.passkey-vault.json",
-    "test": "vitest run",
+    "test": "vitest run && node --test tools/*.test.mjs",
+    "test:tools": "node --test tools/*.test.mjs",
     "test:verbose": "vitest run --reporter=verbose",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

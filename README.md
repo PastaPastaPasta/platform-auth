@@ -40,6 +40,8 @@ This keeps the auth engine reusable across multiple apps with different onboardi
 - `PlatformAuthProvider` and `usePlatformAuth`: React bindings for consuming controller state
 - typed adapter interfaces: contracts for storage, identity lookup, usernames, vaults, passkeys, and side effects
 - Yappr-compatible key-exchange module: protocol helpers, transport polling, registration helpers, and React hooks
+- App Connect v2 module (`src/app-connect/`, also importable as `@pastapastapasta/platform-auth/app-connect`): headless wallet-login protocol core (request encoding, response encryption, candidate polling, verification, session records)
+- `tools/vendor.mjs`: copies modules into an app's repo with a `VENDORED.json` manifest; see [docs/vendoring.md](docs/vendoring.md)
 - `@pastapastapasta/platform-auth/passkey-vault`: an on-chain passkey vault core (HPKE + WebAuthn PRF, no SDK, no React); see [`docs/passkey-vault.md`](./docs/passkey-vault.md)
 
 ## Integration Model
@@ -74,6 +76,10 @@ That module includes:
   - `useYapprKeyRegistration(controller, onComplete?, options?)`
 
 The hooks are headless. Apps render their own QR code, timers, errors, and success states while the package keeps the protocol, timers, and state transitions consistent.
+
+## App Connect v2
+
+`src/app-connect/` is a headless implementation of the App Connect v2 wallet-login protocol, specified in [docs/APP_CONNECT_PROFILE.md](docs/APP_CONNECT_PROFILE.md). It depends only on `@noble/hashes` and `@noble/secp256k1`, ships its own test vectors (`vectors.json`), and is meant to be consumed either as a package import or vendored into an app with `tools/vendor.mjs`. The app supplies the transport (identity and document queries) through the port interfaces in `types.ts`; the module encodes requests, opens and verifies wallet responses, and builds session records.
 
 ## Minimum Integration
 

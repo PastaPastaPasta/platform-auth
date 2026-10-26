@@ -51,7 +51,7 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = ''
   for (let index = 0; index < bytes.length; index += 1) {
-    binary += String.fromCharCode(bytes[index])
+    binary += String.fromCharCode(bytes[index] ?? 0)
   }
 
   return btoa(binary)
@@ -140,12 +140,13 @@ export async function getPrfAssertionForCredentials(
 ): Promise<PasskeyPrfAssertionResult> {
   ensureBrowserPasskeys()
 
-  if (credentials.length === 0) {
+  const firstCredential = credentials[0]
+  if (!firstCredential) {
     throw new Error('No passkey credentials available')
   }
 
   const challenge = crypto.getRandomValues(new Uint8Array(32))
-  const rpId = credentials[0].rpId
+  const rpId = firstCredential.rpId
   const allowCredentials = credentials.map((entry) => ({
     id: toArrayBuffer(entry.credentialId),
     type: 'public-key' as const,

@@ -103,7 +103,7 @@ describe('getPrfAssertionForCredentials', () => {
     ])
 
     expect(get).toHaveBeenCalledTimes(1)
-    const call = get.mock.calls[0][0]
+    const call = get.mock.calls[0]![0]
     expect(call.publicKey.rpId).toBe(RP_ID)
     expect(call.publicKey.challenge).toBeInstanceOf(Uint8Array)
     expect(call.publicKey.challenge).toHaveLength(32)
@@ -114,7 +114,7 @@ describe('getPrfAssertionForCredentials', () => {
     expect(call.publicKey.extensions.prf.evalByCredential).toBeDefined()
     const evalMap = call.publicKey.extensions.prf.evalByCredential as Record<string, { first: Uint8Array }>
     expect(Object.keys(evalMap)).toEqual(['AQIDBAU'])
-    expect(evalMap.AQIDBAU.first).toEqual(prfInput)
+    expect(evalMap.AQIDBAU!.first).toEqual(prfInput)
   })
 
   it('throws when navigator.credentials.get returns null', async () => {
@@ -201,7 +201,7 @@ describe('createPasskeyWithPrf', () => {
 
     await createPasskeyWithPrf(enrollOptions)
 
-    const call = create.mock.calls[0][0]
+    const call = create.mock.calls[0]![0]
     expect(call.publicKey.rp.id).toBe(RP_ID)
     expect(call.publicKey.rp.name).toBe('Platform Auth')
     expect(call.publicKey.user.name).toBe('alice')
@@ -240,7 +240,7 @@ describe('createPasskeyWithPrf', () => {
     }
 
     expect(get).toHaveBeenCalledTimes(1)
-    const assertCall = get.mock.calls[0][0]
+    const assertCall = get.mock.calls[0]![0]
     expect(assertCall.publicKey.allowCredentials).toHaveLength(1)
     expect(new Uint8Array(assertCall.publicKey.allowCredentials[0].id)).toEqual(CREDENTIAL_ID)
 
@@ -250,7 +250,7 @@ describe('createPasskeyWithPrf', () => {
     >
     const evalKeys = Object.keys(evalMap)
     expect(evalKeys).toHaveLength(1)
-    const prfInputUsed = evalMap[evalKeys[0]].first
+    const prfInputUsed = evalMap[evalKeys[0]!]!.first
     expect(prfInputUsed).toHaveLength(32)
     // Three 32-byte fills happen during createPasskeyWithPrf:
     // create-challenge, generatePrfInput, get-challenge.
@@ -283,7 +283,7 @@ describe('createPasskeyWithPrf', () => {
     const result = await createPasskeyWithPrf({ ...enrollOptions, rpId: undefined })
 
     expect(result.rpId).toBe(window.location.hostname)
-    expect(create.mock.calls[0][0].publicKey.rp.id).toBe(window.location.hostname)
+    expect(create.mock.calls[0]![0].publicKey.rp.id).toBe(window.location.hostname)
   })
 
   it('honors a custom rpName override', async () => {
@@ -292,7 +292,7 @@ describe('createPasskeyWithPrf', () => {
 
     await createPasskeyWithPrf({ ...enrollOptions, rpName: 'Custom App' })
 
-    expect(create.mock.calls[0][0].publicKey.rp.name).toBe('Custom App')
+    expect(create.mock.calls[0]![0].publicKey.rp.name).toBe('Custom App')
   })
 })
 
@@ -375,7 +375,7 @@ describe('getPasskeyAllowCredentialIds', () => {
     ])
 
     a[0] = 99
-    expect(out[0][0]).toBe(1)
+    expect(out[0]![0]).toBe(1)
   })
 })
 
