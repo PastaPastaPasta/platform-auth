@@ -124,13 +124,27 @@ The project currently provides the reusable controller, React bindings, adapter 
 npm install @pastapastapasta/platform-auth
 ```
 
-For GitHub Packages installs, configure npm for the `@pastapastapasta` scope:
+The package ships ESM and CommonJS builds with type declarations for both. Under Node.js it needs 20.19+ or 22.12+, because its `@noble/*` dependencies are ESM-only and the CommonJS build relies on `require()` of ES modules; bundlers have no such limit. The root entry point includes the React bindings and needs `react` 18 or 19. The `./app-connect` and `./passkey-vault` subpaths need neither React nor a DOM, so `react` is an optional peer dependency.
 
-```ini
-@pastapastapasta:registry=https://npm.pkg.github.com
-```
+## Security Notes
+
+Read these before you ship the package in a production app.
+
+- **Secrets in browser storage.** `createBrowserSecretStore` keeps the auth, encryption and transfer private keys (WIFs), the login key and the auth-vault key in `localStorage` as plain text, under the `platform_auth_secure_` prefix by default. "Secure" in that prefix does not mean encrypted. Any script that runs on your origin can read them, including an XSS bug, a compromised dependency or a browser extension with page access. Serve the app with a strict Content Security Policy, and keep third-party scripts off origins that hold keys.
+- **Yappr-compatible key exchange (v1).** The wallet's response is not tied to the user who scanned the code. Anyone who sees the QR code or the `dash-key:` URI (a shared screen, a stream, someone looking over a shoulder, another app registered for `dash-key:`) can answer it with their own identity. If the port returns that response, the hooks complete the login as that identity. Before you call `completeYapprKeyExchangeLogin`, show the user the identity (username or avatar) and ask them to confirm it. Prefer App Connect v2 for new integrations.
+- **App Connect v2.** Anyone who sees the request can answer it too. `verifyAppConnectCandidate` proves that an answer is a valid grant, not that it came from the user. Follow the identity-confirmation rules in [docs/APP_CONNECT_PROFILE.md](docs/APP_CONNECT_PROFILE.md): with an identity hint, accept only that identity; without one, always ask the user to confirm the identity, and when several candidates verify, let the user choose. Never pick one silently.
 
 Implementation notes from the initial extraction work are kept in [`docs/`](./docs), including app-specific migration material and an integration guide for the reusable key-exchange module.
+
+## Releasing
+
+Pushing a `vX.Y.Z` tag that matches `package.json` runs `.github/workflows/publish-package.yml`, which lints, tests, smoke-tests the packed tarball and publishes to npm through [trusted publishing](https://docs.npmjs.com/trusted-publishers) (no npm token in the repo; npm adds provenance). A version with a prerelease suffix (`-rc.1`) is published under the `next` dist-tag. The job runs in the `npm` environment, so publishing can be limited to approved people in the repository settings.
+
+npm can only trust a workflow for a package that it knows about. If `npm trust github` refuses the package before it exists, publish the first version by hand from a clean checkout of the tag (`npm ci && npm publish`), then register the workflow:
+
+```bash
+npm trust github <package-name> --file publish-package.yml --repository <owner>/platform-auth --environment npm
+```
 
 ## Development
 
