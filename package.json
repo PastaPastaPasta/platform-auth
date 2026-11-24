@@ -16,27 +16,47 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./app-connect": {
-      "types": "./dist/app-connect/index.d.ts",
-      "import": "./dist/app-connect/index.js",
-      "require": "./dist/app-connect/index.cjs"
+      "import": {
+        "types": "./dist/app-connect/index.d.ts",
+        "default": "./dist/app-connect/index.js"
+      },
+      "require": {
+        "types": "./dist/app-connect/index.d.cts",
+        "default": "./dist/app-connect/index.cjs"
+      }
     },
     "./passkey-vault": {
-      "types": "./dist/passkey-vault/index.d.ts",
-      "import": "./dist/passkey-vault/index.js",
-      "require": "./dist/passkey-vault/index.cjs"
-    }
+      "import": {
+        "types": "./dist/passkey-vault/index.d.ts",
+        "default": "./dist/passkey-vault/index.js"
+      },
+      "require": {
+        "types": "./dist/passkey-vault/index.d.cts",
+        "default": "./dist/passkey-vault/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "docs",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "build": "tsup",
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.passkey-vault.json",
@@ -47,7 +67,8 @@
     "test:coverage": "vitest run --coverage",
     "clean": "rm -rf dist",
     "prepare": "npm run build",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "test:pack": "node tools/pack-smoke.mjs"
   },
   "keywords": [
     "dash",
@@ -57,13 +78,17 @@
     "webauthn",
     "passkey"
   ],
-  "author": "Codex",
   "license": "MIT",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "peerDependencies": {
     "react": "^18.2.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@noble/ciphers": "^2.0.0",

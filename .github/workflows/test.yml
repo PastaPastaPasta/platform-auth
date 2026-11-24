@@ -54,3 +54,26 @@ jobs:
           name: coverage
           path: coverage/
           if-no-files-found: ignore
+
+  package:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.19', '22', '24']
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v6
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Pack, Install and Import Every Entry Point
+        run: npm run test:pack
