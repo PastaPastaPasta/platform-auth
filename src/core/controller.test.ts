@@ -983,6 +983,27 @@ describe('PlatformAuthController.loginWithLoginKey', () => {
     )
   })
 
+  it('keeps its own copy of the login key when the caller wipes it mid-login', async () => {
+    const fakes = createFakeDependencies({
+      withVault: true,
+      identityRecords: new Map([[IDENTITY_ID, makeIdentityRecord(IDENTITY_ID)]]),
+      usernameMap: new Map([[IDENTITY_ID, 'alice']]),
+      profiles: new Set([IDENTITY_ID]),
+    })
+    const loginKey = new Uint8Array(32).fill(7)
+    vi.mocked(fakes.profiles!.hasProfile).mockImplementationOnce(async () => {
+      loginKey.fill(0)
+      return true
+    })
+
+    const controller = new PlatformAuthController(fakes.deps)
+    await controller.loginWithLoginKey(IDENTITY_ID, loginKey, 0)
+
+    const bundle = vi.mocked(fakes.vault!.createOrUpdateVaultBundle).mock.calls[0]![1]
+    expect(bundle.loginKey).toEqual(new Uint8Array(32).fill(7))
+    expect(fakes.secretStore.state.loginKeys.get(IDENTITY_ID)).toEqual(new Uint8Array(32).fill(7))
+  })
+
   it('clears all secrets when the underlying loginWithAuthKey throws', async () => {
     const fakes = createFakeDependencies({
       identityRecords: new Map(),

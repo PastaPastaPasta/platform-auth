@@ -433,7 +433,9 @@ export class PlatformAuthController {
     }
   }
 
-  public async loginWithLoginKey(identityId: string, loginKey: Uint8Array, keyIndex: number): Promise<PlatformAuthResult> {
+  public async loginWithLoginKey(identityId: string, callerLoginKey: Uint8Array, keyIndex: number): Promise<PlatformAuthResult> {
+    // The key-exchange hooks wipe their result on cancel or retry; keep our own copy across the awaits below.
+    const loginKey = callerLoginKey.slice()
     if (!this.features.keyExchangeLogin) {
       throw new Error('Login-key login is disabled')
     }
