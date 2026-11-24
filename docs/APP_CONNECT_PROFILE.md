@@ -200,12 +200,12 @@ Say what the app can do, what it can spend, and for how long, in plain words, an
 
 These are what `src/app-connect/` implements.
 
-**Polling.** Query `loginKeyResponse` with `appEphemeralPubKeyHash == hash160(appEphPub)`, ordered by `$ownerId`, 10 per page, paging after the last owner; with a hint, add `$ownerId == hint`. Poll every 2 s for the first minute, then every 4 s, and immediately on focus or callback. Give up after 10 minutes, or after 20 candidates ("start again").
+**Polling.** Query `loginKeyResponse` with `appEphemeralPubKeyHash == hash160(appEphPub)`, ordered by `$ownerId`, 10 per page, paging after the last owner; with a hint, add `$ownerId == hint`. Poll every 2 s for the first minute, then every 4 s, and immediately on focus or callback. Give up after 10 minutes, or after 20 candidates ("start again"). A page that is out of order or ignores the cursor may hide a candidate, so it counts as a failed read, never as a complete list.
 
 **Verification.** A candidate is accepted only if all of these hold, with proved reads:
 
 1. With an `IDENTITY_HINT`, the candidate's `$ownerId` equals it.
-2. The payload framing is `28 + 32n`, with `n` no larger than the number of bindings, and it decrypts with the AAD.
+2. The payload framing is `28 + 32n` and it decrypts with the AAD, with `n` no larger than the number of bindings. A payload that decrypts but holds more keys than bindings is rejected as `extra-keys`, so the app can tell it from a bad frame or a failed decrypt. (Any document under `$ownerId` was published by that identity, whatever it holds; decryption is not what proves who answered.)
 3. Every slot is a key on `$ownerId` (by point for ECDSA_SECP256K1, by `hash160` for ECDSA_HASH160) that is not disabled.
 4. Every auth key has bounds equal to one requested binding, an allowed level for it (rule 4), and the limits the binding asked for, including the group key's budget.
 5. Every encryption key is MEDIUM, ECDSA_SECP256K1, bound `singleContract` to an `ENC_BINDING` contract with the same purpose, and is the key `identities.contractKeys` currently returns.

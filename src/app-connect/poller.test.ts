@@ -1,6 +1,7 @@
 import { encodeBase58 } from './primitives'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  AppConnectPortError,
   appConnectCandidateKey,
   appConnectPollDelayMs,
   listAppConnectCandidates,
@@ -52,11 +53,27 @@ describe('listAppConnectCandidates', () => {
     expect(p.calls[0]![0]).toBe(ids[4]!)
   })
 
-  it('stops when a port ignores the cursor instead of looping', async () => {
+  it('throws when a port ignores the cursor instead of looping', async () => {
     const listCandidates = vi.fn(async () => [candidate(ids[0]!), candidate(ids[1]!)])
-    const { candidates } = await listAppConnectCandidates({ listCandidates }, new Uint8Array(20), { pageSize: 2 })
-    expect(candidates.map((c) => c.ownerId)).toEqual([ids[0]!, ids[1]!])
+    await expect(listAppConnectCandidates({ listCandidates }, new Uint8Array(20), { pageSize: 2 })).rejects.toThrow(AppConnectPortError)
     expect(listCandidates).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws when a port returns owners out of order, rather than reporting a short list as complete', async () => {
+    const listCandidates = vi.fn(async () => [candidate(ids[2]!), candidate(ids[1]!), candidate(ids[3]!)])
+    await expect(listAppConnectCandidates({ listCandidates }, new Uint8Array(20), { pageSize: 5 })).rejects.toThrow(AppConnectPortError)
+    expect(listCandidates).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a page size that never ends the loop or that Platform would cut short', async () => {
+    const listCandidates = vi.fn(async () => [])
+    for (const pageSize of [0, -1, 1.5, Number.NaN, 101]) {
+      await expect(listAppConnectCandidates({ listCandidates }, new Uint8Array(20), { pageSize })).rejects.toThrow(RangeError)
+    }
+    for (const maxCandidates of [-1, 1.5, Number.NaN]) {
+      await expect(listAppConnectCandidates({ listCandidates }, new Uint8Array(20), { maxCandidates })).rejects.toThrow(RangeError)
+    }
+    expect(listCandidates).not.toHaveBeenCalled()
   })
 
   it('orders the cursor by bytes, not by base58 text', async () => {
