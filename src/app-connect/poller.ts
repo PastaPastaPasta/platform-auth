@@ -32,11 +32,21 @@ export interface AppConnectResponsePort {
 }
 
 export const APP_CONNECT_PAGE_SIZE = 10
+/** Platform returns at most this many documents per query. */
+export const APP_CONNECT_MAX_PAGE_SIZE = 100
 /** Past this many candidates the app stops and asks the user to start again. */
 export const APP_CONNECT_MAX_CANDIDATES = 20
 export const APP_CONNECT_FAST_POLL_MS = 2_000
 export const APP_CONNECT_SLOW_POLL_MS = 4_000
 export const APP_CONNECT_FAST_POLL_WINDOW_MS = 60_000
+
+/** The response port broke its contract, so the candidate list may be incomplete. A bug in the port, not in the request. */
+export class AppConnectPortError extends Error {
+  public constructor(message: string) {
+    super(message)
+    this.name = 'AppConnectPortError'
+  }
+}
 
 export interface ListAppConnectCandidatesOptions {
   hint?: string
@@ -46,7 +56,10 @@ export interface ListAppConnectCandidatesOptions {
 
 /**
  * Pages through every candidate for a request. `truncated` means more than
- * `maxCandidates` exist (spam): the caller should abandon the request.
+ * `maxCandidates` exist (spam): the caller should abandon the request. Throws
+ * {@link AppConnectPortError} when the port ignores the cursor or returns
+ * owners out of order, because the list may be missing candidates; report it
+ * rather than retrying, since a broken port fails the same way every time.
  */
 export async function listAppConnectCandidates(
   port: AppConnectResponsePort,
@@ -54,6 +67,12 @@ export async function listAppConnectCandidates(
   options: ListAppConnectCandidatesOptions = {},
 ): Promise<{ candidates: AppConnectCandidate[]; truncated: boolean }> {
   const { hint, pageSize = APP_CONNECT_PAGE_SIZE, maxCandidates = APP_CONNECT_MAX_CANDIDATES } = options
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > APP_CONNECT_MAX_PAGE_SIZE) {
+    throw new RangeError(`pageSize must be an integer from 1 to ${APP_CONNECT_MAX_PAGE_SIZE}, got ${pageSize}`)
+  }
+  if (!Number.isSafeInteger(maxCandidates) || maxCandidates < 0) {
+    throw new RangeError(`maxCandidates must be a non-negative integer, got ${maxCandidates}`)
+  }
   const candidates: AppConnectCandidate[] = []
   let startAfter: string | undefined
 
@@ -61,8 +80,11 @@ export async function listAppConnectCandidates(
     const page = await port.listCandidates(requestHash, hint, startAfter, pageSize)
     for (const candidate of page) {
       // Defend against a port that ignores the cursor or the hint: anything not
-      // strictly after the cursor would loop, anything else is not ours to see.
-      if (startAfter !== undefined && !idAfter(candidate.ownerId, startAfter)) return { candidates, truncated: false }
+      // strictly after the cursor would loop or hide a candidate, anything else
+      // is not ours to see.
+      if (startAfter !== undefined && !idAfter(candidate.ownerId, startAfter)) {
+        throw new AppConnectPortError(`response port returned ${candidate.ownerId} after ${startAfter}; candidates must be ordered by $ownerId and follow the cursor`)
+      }
       startAfter = candidate.ownerId
       if (hint !== undefined && candidate.ownerId !== hint) continue
       if (candidates.length === maxCandidates) return { candidates, truncated: true }

@@ -18,6 +18,13 @@ export type AppConnectRejectReason =
   /** The request named an identity and the candidate is someone else. */
   | 'hint-mismatch'
   | 'framing'
+  /**
+   * More keys than the request has bindings. For a candidate, the payload
+   * opened, so it is a malformed or hostile answer from `ownerId` that a caller
+   * should see, not something to skip like `framing` or `decrypt`. For a kept
+   * grant, the request now has fewer bindings than the grant has keys.
+   */
+  | 'extra-keys'
   /** Wrong request, wrong owner (a copied response) or tampered ciphertext. */
   | 'decrypt'
   | 'invalid-key'
@@ -164,7 +171,7 @@ export function verifyAppConnectKeys(input: VerifyAppConnectKeysInput): Promise<
 async function verifyKeys(context: VerifyContext, slots: Uint8Array[]): Promise<AppConnectVerification> {
   try {
     if (slots.length > context.request.authBindings.length + context.request.encBindings.length) {
-      throw new Rejection('framing')
+      throw new Rejection('extra-keys')
     }
     const grant = await verifySlots(context, slots)
     return { ok: true, grant }

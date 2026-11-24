@@ -201,7 +201,7 @@ describe('verifyAppConnectCandidate', () => {
       slots: [vectorKeys.groupKey, seed('second group key')],
       keys: [groupKey(), groupKey({ id: 8, data: hash160(pub(seed('second group key'))) })],
     }, 'duplicate-binding'],
-    ['more slots than bindings', { slots: [vectorKeys.groupKey, vectorKeys.profileKey, vectorKeys.encryptionKey, seed('extra')] }, 'framing'],
+    ['more slots than bindings', { slots: [vectorKeys.groupKey, vectorKeys.profileKey, vectorKeys.encryptionKey, seed('extra')] }, 'extra-keys'],
     ['a slot that is not a private key', { slots: [vectorKeys.groupKey, new Uint8Array(32)] }, 'invalid-key'],
   ]
 
